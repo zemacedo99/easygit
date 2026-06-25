@@ -63,10 +63,10 @@ app.whenReady().then(async () => {
   await reloadAndWait();
   await shot('02-repository-list.png');
 
-  // 3) Find repositories / scan flow
-  await run("window.__demo.clickByText('Find repositories on this PC')");
+  // 3) Auto-find Git repositories – preset chooser (full flow is in shoot-scan.js)
+  await run("window.__demo.clickByText('Auto-find Git repositories')");
   await wait(600);
-  await shot('03-scan-results.png');
+  await shot('03-autofind-choose.png');
   await run("window.__demo.closeModal()");
 
   // 4) Add repository – invalid folder message

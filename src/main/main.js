@@ -27,6 +27,9 @@ const urls = require('./urls');
 
 let mainWindow = null;
 
+// Tracks the currently-running scan so it can be cancelled from the UI.
+let activeScanToken = null;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1180,
@@ -89,7 +92,43 @@ function registerIpcHandlers() {
   ipcMain.handle('repos:addMany', async (_e, folderPaths) => repoManager.addManyRepos(folderPaths));
 
   // --- Scan ----------------------------------------------------------------
+  // Legacy single-folder scan (kept for compatibility).
   ipcMain.handle('repos:scan', async (_e, rootPath) => repoManager.scan(rootPath));
+
+  // Automatic, cancellable scan that streams progress to the UI so it never
+  // freezes. preset is 'quick' | 'deeper' | 'custom'.
+  ipcMain.handle('repos:autoScan', async (event, params = {}) => {
+    const { preset, customPath } = params;
+
+    // Only one scan at a time: stop any previous scan, then take ownership with
+    // a fresh cancellation token.
+    if (activeScanToken) activeScanToken.cancelled = true;
+    const token = { cancelled: false };
+    activeScanToken = token;
+
+    // Throttle progress events so we don't flood IPC (always send the final one).
+    let lastSent = 0;
+    const onProgress = (p) => {
+      const now = Date.now();
+      if (!p.done && now - lastSent < 80) return;
+      lastSent = now;
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('repos:scanProgress', p);
+      }
+    };
+
+    try {
+      return await repoManager.autoScan(preset, customPath, { onProgress, token });
+    } finally {
+      if (activeScanToken === token) activeScanToken = null;
+    }
+  });
+
+  // Ask the running scan to stop. It will resolve with whatever it found so far.
+  ipcMain.handle('repos:cancelScan', async () => {
+    if (activeScanToken) activeScanToken.cancelled = true;
+    return { ok: true };
+  });
 
   // --- Status checks -------------------------------------------------------
   ipcMain.handle('repos:checkOne', async (_e, id, options) => repoManager.checkStatus(id, options || {}));

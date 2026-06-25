@@ -38,40 +38,73 @@ function ensureInitialized() {
 }
 
 /**
- * Load the saved repositories. Returns [] if nothing is saved yet or if the
- * file is somehow corrupted (we never crash on a bad file).
- * @returns {Array<object>}
+ * Read the whole saved object. Returns a safe default if nothing is saved yet
+ * or the file is corrupted (we never crash on a bad file).
+ * @returns {{repositories: Array<object>, scanRoots: string[]}}
  */
-function loadRepos() {
+function readAll() {
   ensureInitialized();
   try {
-    if (!fs.existsSync(storageFilePath)) return [];
-    const raw = fs.readFileSync(storageFilePath, 'utf8');
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data.repositories)) return [];
-    return data.repositories;
+    if (!fs.existsSync(storageFilePath)) return { repositories: [], scanRoots: [] };
+    const data = JSON.parse(fs.readFileSync(storageFilePath, 'utf8'));
+    return {
+      repositories: Array.isArray(data.repositories) ? data.repositories : [],
+      scanRoots: Array.isArray(data.scanRoots) ? data.scanRoots : [],
+    };
   } catch (e) {
     // Corrupted file – start clean rather than blocking the user.
-    return [];
+    return { repositories: [], scanRoots: [] };
   }
 }
 
-/**
- * Persist the full list of repositories.
- * @param {Array<object>} repositories
- */
-function saveRepos(repositories) {
+/** Write the whole object atomically (temp file + rename). */
+function writeAll(data) {
   ensureInitialized();
   const payload = {
     version: 1,
     savedAt: new Date().toISOString(),
-    repositories,
+    repositories: data.repositories || [],
+    scanRoots: data.scanRoots || [],
   };
-  // Write atomically-ish: write to a temp file then rename, so a crash midway
-  // can't leave a half-written file.
   const tmp = storageFilePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
   fs.renameSync(tmp, storageFilePath);
+}
+
+/**
+ * Load the saved repositories.
+ * @returns {Array<object>}
+ */
+function loadRepos() {
+  return readAll().repositories;
+}
+
+/**
+ * Persist the list of repositories, preserving any other saved data.
+ * @param {Array<object>} repositories
+ */
+function saveRepos(repositories) {
+  const all = readAll();
+  all.repositories = repositories;
+  writeAll(all);
+}
+
+/**
+ * Load the folders the user has scanned before (used to suggest where to look
+ * next time). @returns {string[]}
+ */
+function loadScanRoots() {
+  return readAll().scanRoots;
+}
+
+/**
+ * Persist the remembered scan-root folders, preserving the repository list.
+ * @param {string[]} scanRoots
+ */
+function saveScanRoots(scanRoots) {
+  const all = readAll();
+  all.scanRoots = scanRoots;
+  writeAll(all);
 }
 
 /** Where the data file lives (handy for the UI / debugging). */
@@ -79,4 +112,4 @@ function getStoragePath() {
   return storageFilePath;
 }
 
-module.exports = { init, loadRepos, saveRepos, getStoragePath };
+module.exports = { init, loadRepos, saveRepos, loadScanRoots, saveScanRoots, getStoragePath };

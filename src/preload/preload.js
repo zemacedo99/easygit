@@ -30,6 +30,16 @@ contextBridge.exposeInMainWorld('easygit', {
 
   // Scan
   scan: (rootPath) => ipcRenderer.invoke('repos:scan', rootPath),
+  // Automatic scan: preset is 'quick' | 'deeper' | 'custom' (customPath required
+  // for 'custom'). Resolves with the full result (found list + summary).
+  autoScan: (preset, customPath) => ipcRenderer.invoke('repos:autoScan', { preset, customPath }),
+  cancelScan: () => ipcRenderer.invoke('repos:cancelScan'),
+  // Subscribe to live scan progress. Returns an unsubscribe function.
+  onScanProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('repos:scanProgress', listener);
+    return () => ipcRenderer.removeListener('repos:scanProgress', listener);
+  },
 
   // Status
   checkOne: (id, options) => ipcRenderer.invoke('repos:checkOne', id, options),

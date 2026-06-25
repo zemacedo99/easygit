@@ -379,66 +379,252 @@ export function showConfirm({ title, message, confirmLabel = 'Continue', danger 
 }
 
 /**
- * Show scan results and let the user pick which to add.
- * @param {Array<{name: string, path: string, alreadyAdded: boolean}>} found
- * @param {number} scannedFolders
- * @param {(paths: string[]) => void} onAdd
+ * The full "Auto-find Git repositories" experience: a single modal with three
+ * steps — choose how to scan, watch live progress (cancellable), then review
+ * and add. Stays free of IPC: app.js supplies the async handlers.
+ *
+ * @param {object} handlers
+ * @param {() => Promise<string|null>} handlers.pickFolder    Native folder picker (custom scan).
+ * @param {(preset: string, customPath: string|null, onProgress: Function) => Promise<object>} handlers.startScan
+ * @param {() => Promise<any>} handlers.cancelScan            Ask the running scan to stop.
+ * @param {(paths: string[]) => Promise<{added: any[], skipped: number}>} handlers.addRepos
+ * @returns {() => void} close function
  */
-export function showScanResultsModal(found, scannedFolders, onAdd) {
-  const addable = found.filter((f) => !f.alreadyAdded);
+export function showAutoScanModal(handlers) {
+  const root = document.getElementById('modal-root');
 
-  if (found.length === 0) {
-    openModalSimple(
-      'No repositories found',
-      `EasyGit looked through ${scannedFolders} folder${scannedFolders === 1 ? '' : 's'} but did not find any Git repositories there. Try choosing a different folder.`
-    );
-    return;
+  let scanning = false; // true while a scan is in flight (so close() can cancel it)
+  let closed = false; // true once the modal has been dismissed
+
+  const header = h('div', { className: 'modal-header' });
+  const body = h('div', { className: 'modal-body' });
+  const footer = h('div', { className: 'modal-footer' });
+  const overlay = h('div', { className: 'modal-overlay' }, [
+    h('div', { className: 'modal' }, [header, body, footer]),
+  ]);
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (scanning) handlers.cancelScan(); // don't leave an orphan scan running
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+    if (handlers.onClose) handlers.onClose();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+  };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  function setHeader(title, subtitle) {
+    header.textContent = '';
+    header.appendChild(h('h2', { text: title }));
+    if (subtitle) header.appendChild(h('p', { text: subtitle }));
+  }
+  function setBody(node) {
+    body.textContent = '';
+    body.appendChild(node);
+  }
+  function setFooter(nodes) {
+    footer.textContent = '';
+    nodes.forEach((n) => n && footer.appendChild(n));
   }
 
-  const checkboxes = new Map();
-  const items = found.map((f) => {
-    const cb = h('input', {
-      type: 'checkbox',
-      checked: !f.alreadyAdded,
-      disabled: f.alreadyAdded,
-    });
-    checkboxes.set(f.path, cb);
-    return h('li', { className: 'scan-item' + (f.alreadyAdded ? ' disabled' : '') }, [
-      cb,
-      h('div', {}, [
-        h('div', { className: 'scan-name', text: f.name }),
-        h('div', { className: 'scan-path', text: f.path }),
-      ]),
-      f.alreadyAdded ? h('span', { className: 'already', text: '✓ Already added' }) : null,
-    ]);
-  });
+  /* ---- Step 1: choose how to scan ---- */
+  function renderChoose() {
+    setHeader('Auto-find Git repositories', 'EasyGit can look for Git projects in the usual places on this computer.');
 
-  const close = openModal({
-    title: 'Repositories found',
-    subtitle: `Found ${found.length} repositor${found.length === 1 ? 'y' : 'ies'} in ${scannedFolders} folder${
-      scannedFolders === 1 ? '' : 's'
-    }. Choose which ones to add.`,
-    body: h('ul', { className: 'scan-list' }, items),
-    footer: [
-      h('button', { className: 'btn', onClick: () => close() }, 'Cancel'),
-      h(
-        'button',
-        {
-          className: 'btn btn-primary',
-          disabled: addable.length === 0,
-          onClick: () => {
-            const chosen = [];
-            for (const [pth, cb] of checkboxes) {
-              if (cb.checked && !cb.disabled) chosen.push(pth);
-            }
+    const option = (icon, title, desc, onClick) =>
+      h('button', { className: 'scan-preset', onClick }, [
+        h('span', { className: 'scan-preset-icon', text: icon }),
+        h('span', { className: 'scan-preset-text' }, [
+          h('span', { className: 'scan-preset-title', text: title }),
+          h('span', { className: 'scan-preset-desc', text: desc }),
+        ]),
+      ]);
+
+    setBody(
+      h('div', { className: 'scan-presets' }, [
+        option('⚡', 'Quick scan', 'Looks in your usual project and code folders. Fastest.', () => beginScan('quick', null)),
+        option('🔎', 'Deeper scan', 'Also looks across Desktop, Documents and Downloads. Slower, finds more.', () => beginScan('deeper', null)),
+        option('📁', 'Choose a folder…', 'Pick one folder and search the folders inside it.', chooseCustom),
+      ])
+    );
+    setFooter([h('button', { className: 'btn', onClick: close }, 'Cancel')]);
+  }
+
+  async function chooseCustom() {
+    const folder = await handlers.pickFolder();
+    if (!folder) return; // OS picker cancelled – stay on the choose step
+    beginScan('custom', folder);
+  }
+
+  /* ---- Step 2: scanning (live progress) ---- */
+  let scannedEl, foundEl, currentEl, cancelBtn;
+
+  function renderScanning(preset) {
+    setHeader('Searching for Git projects…', presetLabel(preset));
+    scannedEl = h('strong', { text: '0' });
+    foundEl = h('strong', { text: '0' });
+    currentEl = h('div', { className: 'scan-current', text: 'Starting…' });
+
+    setBody(
+      h('div', {}, [
+        h('div', { className: 'progress-track' }, [h('div', { className: 'progress-bar indeterminate' })]),
+        h('div', { className: 'scan-stats' }, [
+          h('div', {}, ['Folders looked in: ', scannedEl]),
+          h('div', {}, ['Git projects found so far: ', foundEl]),
+        ]),
+        currentEl,
+      ])
+    );
+
+    cancelBtn = h('button', { className: 'btn btn-danger', onClick: requestCancel }, 'Stop scan');
+    setFooter([cancelBtn]);
+  }
+
+  function requestCancel() {
+    if (cancelBtn) {
+      cancelBtn.disabled = true;
+      cancelBtn.textContent = 'Stopping…';
+    }
+    handlers.cancelScan();
+  }
+
+  function updateProgress(p) {
+    if (closed || !scannedEl) return;
+    scannedEl.textContent = String(p.scannedFolders || 0);
+    foundEl.textContent = String(p.found || 0);
+    if (p.done) currentEl.textContent = 'Finishing up…';
+    else if (p.currentPath) currentEl.textContent = p.currentPath;
+  }
+
+  async function beginScan(preset, customPath) {
+    renderScanning(preset);
+    scanning = true;
+    let result;
+    try {
+      result = await handlers.startScan(preset, customPath || null, updateProgress);
+    } catch (e) {
+      result = { found: [], scannedFolders: 0, cancelled: false, summary: { total: 0, new: 0, already: 0 } };
+    }
+    scanning = false;
+    if (closed) return; // user dismissed the modal mid-scan; nothing to render
+    renderResults(result);
+  }
+
+  /* ---- Step 3: review and add ---- */
+  function renderResults(result) {
+    const {
+      found = [],
+      summary = { total: 0, new: 0, already: 0 },
+      cancelled,
+      scannedFolders = 0,
+      limitReached,
+      errorCount,
+    } = result;
+
+    if (found.length === 0) {
+      setHeader('No Git projects found', '');
+      const msg = cancelled
+        ? `The scan was stopped early after looking in ${scannedFolders} folder${scannedFolders === 1 ? '' : 's'}. No Git projects were found yet.`
+        : `EasyGit looked in ${scannedFolders} folder${scannedFolders === 1 ? '' : 's'} but did not find any Git projects. You could try a deeper scan or choose a specific folder.`;
+      setBody(h('p', { className: 'muted', text: msg }));
+      setFooter([
+        h('button', { className: 'btn', onClick: close }, 'Close'),
+        h('button', { className: 'btn btn-primary', onClick: renderChoose }, 'Scan again'),
+      ]);
+      return;
+    }
+
+    setHeader('Git projects found', summaryLine(summary, cancelled));
+
+    const checkboxes = new Map();
+    const items = found.map((f) => {
+      const cb = h('input', { type: 'checkbox', checked: !f.alreadyAdded, disabled: f.alreadyAdded });
+      checkboxes.set(f.path, cb);
+      return h('li', { className: 'scan-item' + (f.alreadyAdded ? ' disabled' : '') }, [
+        cb,
+        h('div', {}, [
+          h('div', { className: 'scan-name', text: f.name }),
+          h('div', { className: 'scan-path', text: f.path }),
+        ]),
+        h('span', {
+          className: 'scan-tag ' + (f.alreadyAdded ? 'tag-added' : 'tag-new'),
+          text: f.alreadyAdded ? '✓ Already added' : 'New',
+        }),
+      ]);
+    });
+
+    const newItems = found.filter((f) => !f.alreadyAdded);
+    const toggleAll = (state) => {
+      for (const [, cb] of checkboxes) if (!cb.disabled) cb.checked = state;
+    };
+
+    setBody(
+      h('div', {}, [
+        newItems.length
+          ? h('div', { className: 'scan-tools' }, [
+              h('button', { className: 'btn btn-sm', onClick: () => toggleAll(true) }, 'Select all new'),
+              h('button', { className: 'btn btn-sm', onClick: () => toggleAll(false) }, 'Clear selection'),
+            ])
+          : null,
+        h('ul', { className: 'scan-list' }, items),
+        limitReached || errorCount
+          ? h('p', { className: 'muted scan-note', text: noteText(limitReached, errorCount) })
+          : null,
+      ])
+    );
+
+    const addBtn = h(
+      'button',
+      {
+        className: 'btn btn-primary',
+        disabled: newItems.length === 0,
+        onClick: async () => {
+          const chosen = [];
+          for (const [pth, cb] of checkboxes) if (cb.checked && !cb.disabled) chosen.push(pth);
+          if (chosen.length === 0) {
             close();
-            if (chosen.length > 0) onAdd(chosen);
-          },
+            return;
+          }
+          addBtn.disabled = true;
+          addBtn.textContent = 'Adding…';
+          await handlers.addRepos(chosen);
+          close();
         },
-        addable.length === 0 ? 'All already added' : `Add selected`
-      ),
-    ],
-  });
+      },
+      newItems.length === 0 ? 'All already added' : 'Add selected repositories'
+    );
+
+    setFooter([h('button', { className: 'btn', onClick: close }, 'Cancel'), addBtn]);
+  }
+
+  /* ---- small text helpers ---- */
+  function presetLabel(preset) {
+    if (preset === 'quick') return 'Looking in your usual project folders…';
+    if (preset === 'deeper') return 'Looking across your main user folders…';
+    return 'Looking inside the folder you chose…';
+  }
+  function summaryLine(summary, cancelled) {
+    const base = `Found ${summary.total} Git project${summary.total === 1 ? '' : 's'}. ${summary.new} ${
+      summary.new === 1 ? 'is' : 'are'
+    } new and ${summary.already} ${summary.already === 1 ? 'was' : 'were'} already added.`;
+    return cancelled ? 'Scan stopped early. ' + base : base;
+  }
+  function noteText(limitReached, errorCount) {
+    const parts = [];
+    if (limitReached) parts.push('The scan reached its size limit, so some folders were not checked.');
+    if (errorCount) parts.push(`${errorCount} folder${errorCount === 1 ? '' : 's'} could not be opened and were skipped.`);
+    return parts.join(' ');
+  }
+
+  root.appendChild(overlay);
+  renderChoose();
+  return close;
 }
 
 /** A minimal info-only modal. */

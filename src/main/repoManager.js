@@ -42,9 +42,12 @@ function newId() {
   return crypto.randomBytes(8).toString('hex');
 }
 
-/** Normalize a path so duplicates are detected reliably. */
+/**
+ * Normalize a path so duplicates are detected reliably. Delegates to the
+ * scanner so scan results and added repositories are compared identically.
+ */
 function normalize(p) {
-  return path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+  return scanner.normalizePath(p);
 }
 
 /** Return the stored repositories, enriched with display-friendly extras. */
@@ -144,18 +147,111 @@ function renameRepo(id, newName) {
 }
 
 /**
- * Scan a chosen folder for git repositories.
- * @param {string} rootPath
+ * Build the list of "extra" roots to fold into an automatic scan: folders the
+ * user scanned before, plus the parent folders of repositories already added
+ * (so a re-scan easily finds sibling projects).
+ * @returns {string[]}
  */
-async function scan(rootPath) {
-  const result = await scanner.scanForRepos(rootPath);
+function getExtraRoots() {
+  const previouslyScanned = storage.loadScanRoots();
+  const parentsOfAdded = repos
+    .map((r) => path.dirname(r.path))
+    // Drop bare drive/filesystem roots (e.g. a repo at C:\repo -> C:\): scanning
+    // from a drive root would walk the whole disk.
+    .filter((p) => path.dirname(p) !== p);
+  return [...previouslyScanned, ...parentsOfAdded];
+}
+
+/**
+ * Remember a folder the user chose to scan, so future automatic scans look
+ * there too. Keeps the most recent entries, de-duplicated, capped in size.
+ * @param {string} folderPath
+ */
+function rememberScanRoot(folderPath) {
+  if (!folderPath) return;
+  const previous = storage.loadScanRoots();
+  const merged = [];
+  const seen = new Set();
+  for (const p of [path.resolve(folderPath), ...previous]) {
+    const n = normalize(p);
+    if (seen.has(n)) continue;
+    seen.add(n);
+    merged.push(p);
+    if (merged.length >= 25) break;
+  }
+  storage.saveScanRoots(merged);
+}
+
+/** Decorate raw scan hits with "already added" + sort new ones first. */
+function decorateFindings(rawFound) {
   const known = new Set(repos.map((r) => normalize(r.path)));
-  // Mark which discovered repos are already in EasyGit so the UI can show it.
-  const found = result.found.map((f) => ({
+  const found = rawFound.map((f) => ({
     ...f,
     alreadyAdded: known.has(normalize(f.path)),
   }));
-  return { ...result, found };
+  found.sort(
+    (a, b) =>
+      Number(a.alreadyAdded) - Number(b.alreadyAdded) ||
+      a.name.localeCompare(b.name)
+  );
+  const newCount = found.filter((f) => !f.alreadyAdded).length;
+  return {
+    found,
+    summary: { total: found.length, new: newCount, already: found.length - newCount },
+  };
+}
+
+/**
+ * Automatically scan likely locations (or a chosen folder) for git repositories.
+ *
+ * @param {'quick'|'deeper'|'custom'} preset
+ * @param {string|null} customPath  Required when preset === 'custom'.
+ * @param {object} [hooks]
+ * @param {Function} [hooks.onProgress]  Forwarded to the scanner.
+ * @param {{cancelled: boolean}} [hooks.token]  Cancellation token.
+ */
+async function autoScan(preset, customPath, hooks = {}) {
+  let roots;
+  let maxDepth;
+
+  if (preset === 'custom') {
+    if (!customPath) {
+      return { found: [], roots: [], scannedFolders: 0, cancelled: false, errorCount: 0, limitReached: false, summary: { total: 0, new: 0, already: 0 } };
+    }
+    roots = [path.resolve(customPath)];
+    maxDepth = scanner.DEPTH.custom;
+    rememberScanRoot(customPath); // so future auto-scans look here too
+  } else {
+    roots = scanner.getCandidateRoots(preset, getExtraRoots());
+    maxDepth = preset === 'deeper' ? scanner.DEPTH.deeper : scanner.DEPTH.quick;
+  }
+
+  const result = await scanner.scan({
+    roots,
+    maxDepth,
+    onProgress: hooks.onProgress,
+    token: hooks.token,
+  });
+
+  const { found, summary } = decorateFindings(result.found);
+
+  return {
+    found,
+    roots,
+    scannedFolders: result.scannedFolders,
+    cancelled: result.cancelled,
+    errorCount: result.errors.length,
+    limitReached: result.limitReached,
+    summary,
+  };
+}
+
+/**
+ * Legacy single-folder scan (kept for backward compatibility). Prefer autoScan.
+ * @param {string} rootPath
+ */
+async function scan(rootPath) {
+  return autoScan('custom', rootPath);
 }
 
 /**
@@ -335,6 +431,7 @@ module.exports = {
   removeRepo,
   renameRepo,
   scan,
+  autoScan,
   checkStatus,
   saveVersion,
   download,
