@@ -294,8 +294,11 @@ async function checkStatus(id, options = {}) {
   repo.remoteUrl = remoteUrl || null;
   repo.branch = branch;
 
-  // Local changes
-  const local = await git.getLocalChanges(repo.path);
+  // Detailed local status: changed (working), ready-to-save (staged), conflicts.
+  const detailed = await git.getDetailedStatus(repo.path);
+  const working = detailed.ok ? detailed.working : [];
+  const staged = detailed.ok ? detailed.staged : [];
+  const conflicted = detailed.ok ? detailed.conflicted : [];
 
   // Optionally refresh online info first.
   let fetched = false;
@@ -306,13 +309,20 @@ async function checkStatus(id, options = {}) {
     if (!f.ok) fetchError = f.errorCode;
   }
 
-  // Ahead / behind vs the online version line.
+  // Ahead / behind vs the online version line + the upstream name.
   const ab = await git.getAheadBehind(repo.path);
+  const upstream = await git.getUpstreamName(repo.path);
 
   const facts = {
     hasRemote: !!repo.remoteUrl,
     hasUpstream: ab.hasUpstream,
-    localChangeCount: local.ok ? local.files.length : 0,
+    // Boolean "any changes?" signal only. A file changed on both sides ("MM")
+    // appears in both working and staged, so this may exceed the unique count.
+    localChangeCount: working.length + staged.length + conflicted.length,
+    workingCount: working.length,
+    stagedCount: staged.length,
+    conflictedCount: conflicted.length,
+    untrackedCount: working.filter((f) => f.type === 'untracked').length,
     ahead: ab.ahead,
     behind: ab.behind,
     fetched,
@@ -324,8 +334,19 @@ async function checkStatus(id, options = {}) {
   repo.lastChecked = new Date().toISOString();
   persist();
 
-  // Recent history is a nice-to-have; ignore failures.
-  const history = await git.getRecentHistory(repo.path, 5);
+  // Recent history, marking which saved versions are only on this computer.
+  const unpushed = await git.getUnpushedHashes(repo.path);
+  const hist = await git.getRecentHistory(repo.path, 10);
+  const history = (hist.ok ? hist.entries : []).map((e, i) => {
+    let local;
+    if (unpushed) local = unpushed.has(e.full); // precise: hash is ahead of upstream
+    else if (!ab.hasUpstream) local = true; // no online line yet: nothing is uploaded
+    else local = i < ab.ahead; // upstream exists but the lookup failed: best-effort (newest first)
+    return { ...e, local };
+  });
+
+  // Local branches (for the version-line selector). Best-effort.
+  const branches = await git.listBranches(repo.path);
 
   return {
     ok: true,
@@ -333,13 +354,117 @@ async function checkStatus(id, options = {}) {
     details: {
       ...interpreted,
       branch,
-      files: local.ok ? local.files : [],
-      history: history.ok ? history.entries : [],
+      branches,
+      upstream,
+      hasRemote: facts.hasRemote,
+      remoteUrl: repo.remoteUrl,
+      provider: urls.providerName(repo.remoteUrl),
+      browserUrl: urls.toBrowserUrl(repo.remoteUrl),
       ahead: facts.ahead,
       behind: facts.behind,
+      fetched,
+      lastChecked: repo.lastChecked,
+      working,
+      staged,
+      conflicted,
+      history,
+      counts: {
+        working: working.length,
+        staged: staged.length,
+        conflicted: conflicted.length,
+        history: history.length,
+      },
       fetchError: fetchError ? friendlyError(fetchError) : null,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Selection / staging actions (each only from an explicit user action in the UI)
+// ---------------------------------------------------------------------------
+
+/** Move specific files into "ready to save" (stage). */
+async function stageFiles(id, paths) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+  const res = await git.stageFiles(repo.path, paths);
+  return res.ok ? { ok: true } : { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+}
+
+/** Move ALL changes into "ready to save" (never touches conflicted files). */
+async function stageAll(id) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+
+  // If there are conflicts, `git add -A` would silently mark them resolved
+  // (auto conflict resolution, which EasyGit must never do). In that case stage
+  // only the explicit non-conflicted changed paths instead.
+  const detailed = await git.getDetailedStatus(repo.path);
+  if (detailed.ok && detailed.conflicted.length > 0) {
+    const paths = [...new Set(detailed.working.map((f) => f.path))];
+    if (paths.length === 0) return { ok: true };
+    const res = await git.stageFiles(repo.path, paths);
+    return res.ok ? { ok: true } : { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+  }
+
+  const res = await git.stageAll(repo.path);
+  return res.ok ? { ok: true } : { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+}
+
+/** Move specific files back out of "ready to save" (unstage), completely. */
+async function unstageFiles(id, paths) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+
+  // A staged rename is one item (new path) but git tracks it as delete(old) +
+  // add(new). Restoring only the new path would leave the old path's deletion
+  // staged, so also restore the original path for any selected rename/copy.
+  const detailed = await git.getDetailedStatus(repo.path);
+  const expanded = new Set(paths);
+  if (detailed.ok) {
+    for (const f of detailed.staged) {
+      if ((f.type === 'renamed' || f.type === 'copied') && f.orig && paths.includes(f.path)) {
+        expanded.add(f.orig);
+      }
+    }
+  }
+  const res = await git.unstageFiles(repo.path, [...expanded]);
+  return res.ok ? { ok: true } : { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+}
+
+/** Save a version from ONLY the ready-to-save (staged) changes. */
+async function commitStaged(id, message) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+  if (!message || !message.trim()) {
+    return { ok: false, error: { title: 'A short description is needed', detail: 'Please describe what this saved version contains.' } };
+  }
+  const detailed = await git.getDetailedStatus(repo.path);
+  if (detailed.ok && detailed.staged.length === 0) {
+    return { ok: false, error: { title: 'Nothing selected to save', detail: 'Move at least one change into “Ready to save” first.' } };
+  }
+  const res = await git.commitStaged(repo.path, message.trim());
+  if (!res.ok) return { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+  return { ok: true, message: 'Your version was saved on this computer.' };
+}
+
+/** Switch to another existing local version line (branch). Never creates/deletes. */
+async function switchBranch(id, name) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+  const res = await git.switchBranch(repo.path, name);
+  if (!res.ok) return { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+  return { ok: true, message: `You are now on version line “${name}”.` };
+}
+
+/** Resolve a repository's folder path (used by main to reveal a file). */
+function getRepoPath(id) {
+  const repo = findById(id);
+  return repo ? repo.path : null;
+}
+
+function notFound() {
+  return { ok: false, error: { title: 'Not found', detail: 'That repository is no longer in your list.' } };
 }
 
 // ---------------------------------------------------------------------------
@@ -434,8 +559,14 @@ module.exports = {
   autoScan,
   checkStatus,
   saveVersion,
+  stageFiles,
+  stageAll,
+  unstageFiles,
+  commitStaged,
+  switchBranch,
   download,
   upload,
   hasUnsavedChanges,
+  getRepoPath,
   getStoragePath: storage.getStoragePath,
 };

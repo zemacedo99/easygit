@@ -57,6 +57,14 @@ contextBridge.exposeInMainWorld('easygit', {
   upload: (id) => ipcRenderer.invoke('repos:upload', id),
   hasUnsaved: (id) => ipcRenderer.invoke('repos:hasUnsaved', id),
 
+  // Selection / staging / saving (details screen)
+  stage: (id, paths) => ipcRenderer.invoke('repos:stage', id, paths),
+  stageAll: (id) => ipcRenderer.invoke('repos:stageAll', id),
+  unstage: (id, paths) => ipcRenderer.invoke('repos:unstage', id, paths),
+  commitStaged: (id, message) => ipcRenderer.invoke('repos:commitStaged', id, message),
+  switchBranch: (id, name) => ipcRenderer.invoke('repos:switchBranch', id, name),
+  revealFile: (id, relPath) => ipcRenderer.invoke('repos:revealFile', id, relPath),
+
   // OS integrations
   pickFolder: (title) => ipcRenderer.invoke('dialog:pickFolder', title),
   openFolder: (folderPath) => ipcRenderer.invoke('shell:openFolder', folderPath),

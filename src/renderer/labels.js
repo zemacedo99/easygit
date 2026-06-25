@@ -32,15 +32,29 @@ export function formatLastChecked(iso) {
 }
 
 /**
- * The per-repository actions, in display order. Each maps to a handler key the
- * app wires up. `primary` styles the button more prominently.
+ * Friendly presentation for each file change type. `cls` is a CSS class used to
+ * colour the badge. These intentionally avoid raw Git terms.
  */
-export const REPO_ACTIONS = [
-  { key: 'check', icon: '🔎', label: 'Check changes', primary: true },
-  { key: 'checkOnline', icon: '🌐', label: 'Check online version' },
-  { key: 'save', icon: '💾', label: 'Save a version' },
-  { key: 'download', icon: '⬇️', label: 'Download latest version' },
-  { key: 'upload', icon: '⬆️', label: 'Upload my saved changes' },
-  { key: 'openFolder', icon: '📂', label: 'Open folder' },
-  { key: 'openRemote', icon: '🔗', label: 'Open online repository' },
-];
+export const CHANGE_TYPES = {
+  added: { label: 'Added', icon: '➕', cls: 'ct-added' },
+  modified: { label: 'Edited', icon: '✏️', cls: 'ct-modified' },
+  deleted: { label: 'Deleted', icon: '🗑️', cls: 'ct-deleted' },
+  renamed: { label: 'Renamed', icon: '🔀', cls: 'ct-renamed' },
+  copied: { label: 'Copied', icon: '📑', cls: 'ct-renamed' },
+  untracked: { label: 'New', icon: '✨', cls: 'ct-untracked' },
+  typechange: { label: 'Changed', icon: '🔁', cls: 'ct-modified' },
+  conflicted: { label: 'Needs attention', icon: '⚠️', cls: 'ct-conflict' },
+};
+
+/** Look up change-type presentation, with a safe fallback. */
+export function changeTypeInfo(type) {
+  return CHANGE_TYPES[type] || { label: 'Changed', icon: '•', cls: 'ct-modified' };
+}
+
+/** Split a repo-relative path into { name, dir } for two-line display. */
+export function splitPath(relPath) {
+  const norm = String(relPath || '').replace(/\\/g, '/');
+  const idx = norm.lastIndexOf('/');
+  if (idx === -1) return { name: norm, dir: '' };
+  return { name: norm.slice(idx + 1), dir: norm.slice(0, idx) };
+}

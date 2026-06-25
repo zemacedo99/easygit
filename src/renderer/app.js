@@ -207,7 +207,43 @@ function showGlobalSummary() {
 
 function detailHandlers() {
   return {
-    onAction: (key) => handleAction(key),
+    onCheck: (fetch) => { const r = currentRepo(); if (r) checkRepo(r.id, !!fetch); },
+
+    // Selection / staging
+    onStage: (paths) => mutate((id) => api.stage(id, paths)),
+    onStageAll: () => mutate((id) => api.stageAll(id)),
+    onUnstage: (paths) => mutate((id) => api.unstage(id, paths)),
+
+    // Save a version from the ready-to-save (staged) changes only.
+    onSaveVersion: () => {
+      const repo = currentRepo();
+      if (!repo) return;
+      ui.showSaveVersionModal(async (message) => {
+        const res = await api.commitStaged(repo.id, message);
+        if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
+        else ui.showToast({ type: 'success', title: 'Version saved', body: res.message });
+        await checkRepo(repo.id, false);
+      });
+    },
+
+    onUpload: () => { const r = currentRepo(); if (r) runAction(r, () => api.upload(r.id), 'Uploading your saved versions…'); },
+    onDownload: () => { const r = currentRepo(); if (r) handleDownload(r); },
+    onSwitchBranch: (name) => switchVersionLine(name),
+    onReveal: (relPath) => { const r = currentRepo(); if (r) api.revealFile(r.id, relPath); },
+
+    onOpenFolder: async () => {
+      const r = currentRepo();
+      if (!r) return;
+      const res = await api.openFolder(r.path);
+      if (!res.ok) ui.showToast({ type: 'error', title: 'Could not open folder', body: res.error || '' });
+    },
+    onOpenRemote: async () => {
+      const r = currentRepo();
+      if (!r) return;
+      const res = await api.openRemote(r.remoteUrl);
+      if (!res.ok) ui.showToast({ type: 'warn', title: 'No online repository', body: res.error || '' });
+    },
+
     onRename: () => {
       const repo = currentRepo();
       if (!repo) return;
@@ -241,54 +277,54 @@ function detailHandlers() {
   };
 }
 
-async function handleAction(key) {
+let mutating = false; // guards against overlapping git index writes (index.lock races)
+
+/** Run a repo-mutating IPC call, surface any error, then refresh the details. */
+async function mutate(fn) {
+  const repo = currentRepo();
+  if (!repo || mutating) return;
+  mutating = true;
+  try {
+    const res = await fn(repo.id);
+    if (res && res.ok === false && res.error) {
+      ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
+    }
+    await checkRepo(repo.id, false);
+  } finally {
+    mutating = false;
+  }
+}
+
+/** Switch version line (branch), warning first if there are unsaved changes. */
+function switchVersionLine(name) {
   const repo = currentRepo();
   if (!repo) return;
+  const details = state.details[repo.id];
+  const counts = (details && details.counts) || { working: 0, staged: 0, conflicted: 0 };
+  const hasChanges = counts.working > 0 || counts.staged > 0 || counts.conflicted > 0;
 
-  switch (key) {
-    case 'check':
-      await checkRepo(repo.id, false);
-      break;
+  // Snap the dropdown back to the real current line. A confirmed switch rebuilds
+  // it via checkRepo; if the user cancels, the card already shows the true line.
+  rerender();
 
-    case 'checkOnline':
-      await checkRepo(repo.id, true);
-      break;
+  const doSwitch = async () => {
+    const res = await api.switchBranch(repo.id, name);
+    if (!res.ok) ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
+    else ui.showToast({ type: 'success', title: 'Switched version line', body: res.message });
+    await checkRepo(repo.id, false);
+  };
 
-    case 'save':
-      ui.showSaveVersionModal(async (message) => {
-        const res = await api.saveVersion(repo.id, message);
-        if (!res.ok) {
-          ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
-        } else {
-          ui.showToast({ type: 'success', title: 'Version saved', body: res.message });
-        }
-        await checkRepo(repo.id, false);
-      });
-      break;
-
-    case 'download':
-      await handleDownload(repo);
-      break;
-
-    case 'upload':
-      await runAction(repo, () => api.upload(repo.id), 'Uploading your saved changes…');
-      break;
-
-    case 'openFolder': {
-      const res = await api.openFolder(repo.path);
-      if (!res.ok) {
-        ui.showToast({ type: 'error', title: 'Could not open folder', body: res.error || '' });
-      }
-      break;
-    }
-
-    case 'openRemote': {
-      const res = await api.openRemote(repo.remoteUrl);
-      if (!res.ok) {
-        ui.showToast({ type: 'warn', title: 'No online repository', body: res.error || '' });
-      }
-      break;
-    }
+  if (hasChanges) {
+    ui.showConfirm(
+      {
+        title: 'You have unsaved changes',
+        message: `Switching version line may move or hide your current changes. It is safer to save a version first. Switch to “${name}” anyway?`,
+        confirmLabel: 'Switch anyway',
+      },
+      doSwitch
+    );
+  } else {
+    doSwitch();
   }
 }
 

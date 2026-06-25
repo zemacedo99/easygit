@@ -8,7 +8,7 @@
  * innerHTML) so repository names/paths from disk can never inject markup.
  */
 
-import { formatLastChecked, REPO_ACTIONS } from './labels.js';
+import { formatLastChecked, changeTypeInfo, splitPath } from './labels.js';
 
 /* ------------------------------------------------------------------ */
 /* Tiny DOM helper                                                     */
@@ -176,7 +176,9 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
  * Render the details panel for a selected repository.
  * @param {object} repo
  * @param {object|null} details  result of a status check, or null if not checked
- * @param {object} handlers  { onAction(key), onRemove(), onRename() }
+ * @param {object} handlers  onCheck, onStage, onStageAll, onUnstage, onSaveVersion,
+ *   onUpload, onDownload, onSwitchBranch, onReveal, onOpenFolder, onOpenRemote,
+ *   onRename, onRemove
  */
 export function renderDetails(repo, details, handlers) {
   const detailsEmpty = document.getElementById('details-empty');
@@ -193,118 +195,409 @@ export function renderDetails(repo, details, handlers) {
   detailsEl.hidden = false;
   detailsEl.textContent = '';
 
-  // Header: name + path + status badge, with rename/remove.
-  const header = h('div', { className: 'details-header' }, [
-    h('div', { className: 'details-title' }, [
-      h('h2', { text: repo.name }),
-      h('p', { className: 'repo-path', text: repo.path }),
-    ]),
-    statusBadge(repo.statusTone, repo.statusLabel),
-  ]);
-  detailsEl.appendChild(header);
-
-  // Friendly explanation (from the status check, or a gentle prompt if none yet).
-  const explanationText = details
-    ? details.explanation
-    : (repo.statusShort || 'This repository has not been checked yet. Use “Check changes” to see its current state.');
-  const tone = details ? details.tone || repo.statusTone : repo.statusTone;
+  // Header: name + path + status badge.
   detailsEl.appendChild(
-    h('div', { className: `explanation tone-${tone || 'neutral'}`, text: explanationText })
+    h('div', { className: 'details-header' }, [
+      h('div', { className: 'details-title' }, [
+        h('h2', { text: repo.name }),
+        h('p', { className: 'repo-path', text: repo.path }),
+      ]),
+      statusBadge(repo.statusTone, repo.statusLabel),
+    ])
   );
 
-  // If the last fetch failed, surface it gently.
-  if (details && details.fetchError) {
+  // A) Status banner – the colored, plain-language explanation.
+  const tone = details ? details.tone || repo.statusTone : repo.statusTone;
+  const explanationText = details
+    ? details.explanation
+    : repo.statusShort || 'This repository has not been checked yet. Use “Check changes” to see its current state.';
+  detailsEl.appendChild(h('div', { className: `explanation tone-${tone || 'neutral'}`, text: explanationText }));
+
+  // Not checked yet: offer a gentle first action and stop here.
+  if (!details) {
     detailsEl.appendChild(
-      h('div', { className: 'explanation tone-changes' }, [
-        h('strong', { text: details.fetchError.title + '. ' }),
-        details.fetchError.detail,
+      h('div', { className: 'utility-row' }, [
+        actionButton('🔎', 'Check changes', () => handlers.onCheck(false), true),
+        actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
       ])
     );
+    return;
   }
 
-  // Info boxes: version line, local + online summaries, online repository.
-  const infoGrid = h('div', { className: 'info-grid' }, [
-    infoBox('Current version line', (details && details.branch) || repo.branch || '—'),
-    infoBox('Local changes', details ? details.localSummary : 'Not checked yet'),
-    infoBox('Online comparison', details ? details.onlineSummary : 'Not checked yet'),
-    infoBox(
-      'Online repository',
-      repo.provider ? `${repo.provider}` : repo.remoteUrl ? 'Connected' : 'Not connected'
-    ),
-  ]);
-  detailsEl.appendChild(infoGrid);
-
-  // Changed files list
-  if (details && details.files && details.files.length > 0) {
-    const fileItems = details.files
-      .slice(0, 50)
-      .map((f) =>
-        h('li', {}, [
-          h('span', { className: 'file-path', text: f.path }),
-          h('span', { className: 'file-kind', text: f.kind }),
-        ])
-      );
+  // Repository unavailable (folder moved/deleted or no longer a Git repo):
+  // show only the safe utilities, never a misleading empty flow.
+  if (details.error || details.status === 'error') {
     detailsEl.appendChild(
-      section('What changed on this computer', h('ul', { className: 'list' }, fileItems))
-    );
-    if (details.files.length > 50) {
-      detailsEl.appendChild(h('p', { className: 'muted', text: `…and ${details.files.length - 50} more.` }));
-    }
-  }
-
-  // Recent history (saved versions)
-  if (details && details.history && details.history.length > 0) {
-    const histItems = details.history.map((entry) =>
-      h('li', {}, [
-        h('span', { className: 'hist-subject', text: entry.subject }),
-        h('span', { className: 'hist-meta', text: `${entry.author} · ${entry.when}` }),
+      h('div', { className: 'utility-row' }, [
+        actionButton('🔄', 'Check again', () => handlers.onCheck(true), true),
+        actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
+        dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
       ])
     );
-    detailsEl.appendChild(section('Recent saved versions', h('ul', { className: 'list' }, histItems)));
+    return;
   }
 
-  // Action buttons
-  const actionButtons = REPO_ACTIONS.map((action) => {
-    const disabled =
-      (action.key === 'openRemote' && !repo.remoteUrl) ||
-      ((action.key === 'download' || action.key === 'upload') && !repo.remoteUrl);
-    return h(
-      'button',
-      {
-        className: 'btn' + (action.primary ? ' btn-primary' : ''),
-        onClick: () => handlers.onAction(action.key),
-        disabled,
-        title: disabled ? 'This repository is not connected to an online repository yet.' : '',
-      },
-      [h('span', { className: 'btn-icon', text: action.icon }), ' ' + action.label]
-    );
-  });
-  detailsEl.appendChild(section('Actions', h('div', { className: 'actions-grid' }, actionButtons)));
+  // Current version line (branch) card.
+  detailsEl.appendChild(renderVersionLineCard(details, handlers));
 
-  // Manage row (rename / remove)
+  // B) The visual project flow: This computer -> Ready to save -> Saved -> Online.
+  detailsEl.appendChild(renderFlow(repo, details, handlers));
+
+  // Utility actions (always available and safe).
   detailsEl.appendChild(
-    h('div', { className: 'actions-grid' }, [
-      h('button', { className: 'btn btn-sm', onClick: handlers.onRename }, [
-        h('span', { className: 'btn-icon', text: '✏️' }),
-        ' Rename',
-      ]),
-      h('button', { className: 'btn btn-sm btn-danger', onClick: handlers.onRemove }, [
-        h('span', { className: 'btn-icon', text: '🗑️' }),
-        ' Remove from EasyGit',
-      ]),
+    h('div', { className: 'utility-row' }, [
+      actionButton('🔄', 'Check again', () => handlers.onCheck(true)),
+      actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
+      details.browserUrl ? actionButton('🔗', 'Open online repository', () => handlers.onOpenRemote()) : null,
+      actionButton('✏️', 'Rename', () => handlers.onRename()),
+      dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
     ])
   );
 }
 
-function infoBox(title, value) {
-  return h('div', { className: 'info-box' }, [
-    h('h4', { text: title }),
-    h('div', { className: 'info-value', text: value }),
+/* ------------------------------------------------------------------ */
+/* Repository details – helpers for the visual flow                    */
+/* ------------------------------------------------------------------ */
+
+function actionButton(icon, label, onClick, primary) {
+  return h('button', { className: 'btn btn-sm' + (primary ? ' btn-primary' : ''), onClick }, [
+    h('span', { className: 'btn-icon', text: icon }),
+    ' ' + label,
   ]);
 }
 
-function section(title, contentNode) {
-  return h('div', { className: 'section' }, [h('h3', { text: title }), contentNode]);
+function dangerButton(icon, label, onClick) {
+  return h('button', { className: 'btn btn-sm btn-danger', onClick }, [
+    h('span', { className: 'btn-icon', text: icon }),
+    ' ' + label,
+  ]);
+}
+
+function emptyNode(text) {
+  return h('div', { className: 'area-empty', text });
+}
+
+function flowArrow() {
+  return h('div', { className: 'flow-arrow', text: '›' });
+}
+
+/** The "current version line" card with an optional safe branch switcher. */
+function renderVersionLineCard(details, handlers) {
+  const branch = details.branch || '—';
+  const parts = [];
+  parts.push(details.upstream ? `Connected to online “${details.upstream}”.` : 'Not linked to an online version line yet.');
+  if (details.ahead > 0) parts.push(`${details.ahead} saved version${details.ahead === 1 ? '' : 's'} only on this computer.`);
+  if (details.behind > 0) parts.push(`${details.behind} newer version${details.behind === 1 ? '' : 's'} online.`);
+
+  const left = h('div', { className: 'vl-main' }, [
+    h('div', { className: 'vl-label', text: 'Current version line' }),
+    h('div', { className: 'vl-name' }, [h('span', { className: 'vl-icon', text: '🌿' }), h('span', { text: branch })]),
+    h('div', { className: 'vl-sub', text: parts.join(' ') }),
+  ]);
+
+  let switcher = null;
+  const branches = details.branches || [];
+  const onAknownBranch = branches.includes(branch);
+  if (branches.length > 1 || (branches.length >= 1 && !onAknownBranch)) {
+    const sel = h('select', { className: 'vl-select' });
+    // Detached / unknown current line: a disabled placeholder so the dropdown
+    // never claims a line the user is not actually on, while still letting them
+    // pick a real one to recover.
+    if (!onAknownBranch) {
+      const ph = h('option', { value: '', text: 'On a temporary line — pick one' });
+      ph.disabled = true;
+      ph.selected = true;
+      sel.appendChild(ph);
+    }
+    branches.forEach((b) => {
+      const opt = h('option', { value: b, text: b });
+      if (b === branch) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      const v = sel.value;
+      if (v && v !== branch) handlers.onSwitchBranch(v);
+    });
+    switcher = h('div', { className: 'vl-switch' }, [h('label', { className: 'vl-switch-label', text: 'Switch line' }), sel]);
+  }
+
+  return h('div', { className: 'version-line-card' }, [left, switcher]);
+}
+
+/** A selectable, draggable list of files. Returns helpers to read the selection. */
+function selectableFileList(files, fromArea, handlers) {
+  const checks = new Map();
+  const countListeners = [];
+  const notify = () => {
+    const n = getChecked().length;
+    const total = checks.size;
+    countListeners.forEach((fn) => fn(n, total));
+  };
+  const items = files.map((f) => fileRow(f, fromArea, handlers, checks, notify));
+  const node = h('ul', { className: 'file-list' }, items);
+
+  function getChecked() {
+    const out = [];
+    for (const [p, cb] of checks) if (cb.checked) out.push(p);
+    return out;
+  }
+  function selectAll(state) {
+    for (const [, cb] of checks) cb.checked = state;
+    notify();
+  }
+  return { node, getChecked, selectAll, onCountChange: (fn) => countListeners.push(fn) };
+}
+
+/** One file row: checkbox, change badge, name/path, reveal button, drag support. */
+function fileRow(f, fromArea, handlers, checks, notify) {
+  const info = changeTypeInfo(f.type);
+  const { name, dir } = splitPath(f.path);
+  const cb = h('input', { type: 'checkbox', className: 'file-check' });
+  cb.addEventListener('change', () => notify && notify());
+  checks.set(f.path, cb);
+
+  const row = h('li', { className: 'file-row', draggable: 'true' }, [
+    cb,
+    h('span', { className: `ct-badge ${info.cls}`, title: info.label, text: info.icon }),
+    h('div', { className: 'file-meta' }, [
+      h('div', { className: 'file-name', text: name }),
+      dir ? h('div', { className: 'file-dir', text: dir }) : null,
+    ]),
+    h('span', { className: 'file-type', text: info.label }),
+    h('button', {
+      className: 'icon-btn',
+      title: 'Show this file in the folder',
+      onClick: (e) => { e.stopPropagation(); handlers.onReveal(f.path); },
+    }, '📂'),
+  ]);
+
+  row.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'file', from: fromArea, path: f.path, orig: f.orig || null }));
+    // A marker type readable during dragover so only valid areas highlight.
+    e.dataTransfer.setData(markerType('file:' + fromArea), '');
+    e.dataTransfer.effectAllowed = 'move';
+    row.classList.add('dragging');
+  });
+  row.addEventListener('dragend', () => row.classList.remove('dragging'));
+  return row;
+}
+
+/** Non-selectable group for conflicted files (need a person to resolve). */
+function conflictGroup(conflicted, handlers) {
+  return h('div', { className: 'conflict-group' }, [
+    h('div', { className: 'group-title', text: '⚠️ Needs attention' }),
+    h('ul', { className: 'file-list' }, conflicted.map((f) => {
+      const { name, dir } = splitPath(f.path);
+      return h('li', { className: 'file-row conflict' }, [
+        h('span', { className: 'ct-badge ct-conflict', title: 'Needs attention', text: '⚠️' }),
+        h('div', { className: 'file-meta' }, [
+          h('div', { className: 'file-name', text: name }),
+          dir ? h('div', { className: 'file-dir', text: dir }) : null,
+        ]),
+        h('span', { className: 'file-type', text: 'Needs a person' }),
+        h('button', { className: 'icon-btn', title: 'Show this file in the folder', onClick: () => handlers.onReveal(f.path) }, '📂'),
+      ]);
+    })),
+  ]);
+}
+
+/** A timeline of saved versions, newest first. */
+function renderTimeline(history) {
+  if (!history.length) return emptyNode('No saved versions yet.');
+  return h('ul', { className: 'timeline' }, history.map((c, i) =>
+    h('li', { className: 'timeline-item' + (i === 0 ? ' newest' : '') }, [
+      h('span', { className: 'timeline-dot ' + (c.local ? 'is-local' : 'is-online') }),
+      h('div', { className: 'timeline-body' }, [
+        h('div', { className: 'tl-subject', text: c.subject }),
+        h('div', { className: 'tl-meta', text: `${c.author ? c.author + ' · ' : ''}${c.when}${i === 0 ? ' · newest' : ''}` }),
+        h('div', { className: 'tl-tags' }, [
+          h('span', { className: 'tl-loc ' + (c.local ? 'loc-local' : 'loc-online'), text: c.local ? 'On this computer only' : 'Uploaded' }),
+          h('span', { className: 'tl-hash', text: c.hash }),
+        ]),
+      ]),
+    ])
+  ));
+}
+
+/** A visual status card for the online repository. */
+function renderOnlineCard(details) {
+  if (!details.hasRemote) {
+    return emptyNode('Not connected to an online repository. Saved versions stay on this computer.');
+  }
+  const row = (k, v, cls) => h('div', { className: 'online-row' }, [
+    h('span', { className: 'online-key', text: k }),
+    h('span', { className: 'online-val ' + (cls || ''), text: v }),
+  ]);
+  const rows = [
+    row('Provider', details.provider || 'Online repository'),
+  ];
+  if (details.browserUrl || details.remoteUrl) rows.push(row('Address', details.browserUrl || details.remoteUrl));
+  rows.push(row('To upload', details.ahead > 0 ? `${details.ahead} saved version${details.ahead === 1 ? '' : 's'}` : 'Nothing waiting', details.ahead > 0 ? 'val-up' : ''));
+  rows.push(row('To download', details.behind > 0 ? `${details.behind} newer version${details.behind === 1 ? '' : 's'}` : 'Nothing new', details.behind > 0 ? 'val-down' : ''));
+  rows.push(row('Last checked', formatLastChecked(details.lastChecked)));
+  if (details.fetchError) {
+    rows.push(h('div', { className: 'online-warn' }, [h('strong', { text: details.fetchError.title + '. ' }), details.fetchError.detail]));
+  }
+  return h('div', { className: 'online-card' }, rows);
+}
+
+/** Custom drag marker type for an accept key (visible during dragover). */
+function markerType(key) {
+  return 'application/x-easygit-' + key.replace(':', '-');
+}
+
+/** A draggable handle used to drag a whole area onto the next one. */
+function dragHandle(kind, title) {
+  const handle = h('span', { className: 'drag-handle', title, draggable: 'true', text: '⠿' });
+  handle.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ kind }));
+    e.dataTransfer.setData(markerType(kind), '');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  return handle;
+}
+
+/** Make an element accept drops of the given kinds, calling onDrop(payload). */
+function makeDropZone(el, accepts, onDrop) {
+  el.addEventListener('dragover', (e) => {
+    // Only highlight + allow the drop when this zone actually accepts the item.
+    const ok = accepts.some((k) => Array.from(e.dataTransfer.types).includes(markerType(k)));
+    if (!ok) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    el.classList.add('drop-target');
+  });
+  el.addEventListener('dragleave', (e) => {
+    // relatedTarget is where the cursor went; if it left the area entirely, clear.
+    if (!el.contains(e.relatedTarget)) el.classList.remove('drop-target');
+  });
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('drop-target');
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { return; }
+    if (!payload) return;
+    const key = payload.kind === 'file' ? `file:${payload.from}` : payload.kind;
+    if (accepts.includes(key)) onDrop(payload);
+  });
+}
+
+/** Generic flow-area card. */
+function buildArea({ key, icon, title, subtitle, count, countTone, dim, body, actions, handle }) {
+  const header = h('div', { className: 'area-header' }, [
+    h('span', { className: 'area-icon', text: icon }),
+    h('div', { className: 'area-titles' }, [
+      h('div', { className: 'area-title', text: title }),
+      h('div', { className: 'area-sub', text: subtitle }),
+    ]),
+    count != null ? h('span', { className: `count-badge ${countTone || ''}`, text: String(count) }) : null,
+    handle || null,
+  ]);
+  const dimmed = dim != null ? dim : count === 0;
+  return h('div', { className: `flow-area area-${key}` + (dimmed ? ' is-empty' : '') }, [
+    header,
+    body,
+    actions && actions.length ? h('div', { className: 'area-actions' }, actions) : null,
+  ]);
+}
+
+/** The four-area flow with arrows + drag-and-drop wiring. */
+function renderFlow(repo, details, handlers) {
+  const working = details.working || [];
+  const conflicted = details.conflicted || [];
+  const staged = details.staged || [];
+  const history = details.history || [];
+
+  /* Area 1: This computer (working changes + conflicts) */
+  const workingList = selectableFileList(working, 'working', handlers);
+  const moveBtn = actionButton('➡️', 'Move selected to Ready to save', () => {
+    const p = workingList.getChecked();
+    if (p.length) handlers.onStage(p);
+  }, true);
+  moveBtn.disabled = true;
+  workingList.onCountChange((n) => { moveBtn.disabled = n === 0; });
+
+  const a1Children = [];
+  if (working.length) {
+    const master = h('input', { type: 'checkbox', className: 'file-check' });
+    master.addEventListener('change', () => workingList.selectAll(master.checked));
+    // Keep the master checkbox in sync with manual per-file selection.
+    workingList.onCountChange((n, total) => {
+      master.checked = total > 0 && n === total;
+      master.indeterminate = n > 0 && n < total;
+    });
+    a1Children.push(h('label', { className: 'select-all' }, [master, ' Select all changed files']));
+    a1Children.push(workingList.node);
+  }
+  if (conflicted.length) a1Children.push(conflictGroup(conflicted, handlers));
+  const a1Body = a1Children.length ? h('div', {}, a1Children) : emptyNode('No changes on this computer.');
+
+  const a1Actions = [];
+  if (working.length) {
+    a1Actions.push(moveBtn);
+    a1Actions.push(actionButton('✅', 'Move all to Ready to save', () => handlers.onStageAll()));
+  }
+  const area1 = buildArea({
+    key: 'computer', icon: '💻', title: 'This computer',
+    subtitle: 'Files changed but not selected to save yet.',
+    count: working.length + conflicted.length, body: a1Body, actions: a1Actions,
+  });
+  makeDropZone(area1, ['file:staged'], (p) => handlers.onUnstage([p.path]));
+
+  /* Area 2: Ready to save (selected/staged changes) */
+  const stagedList = selectableFileList(staged, 'staged', handlers);
+  const backBtn = actionButton('⬅️', 'Move selected back', () => {
+    const p = stagedList.getChecked();
+    if (p.length) handlers.onUnstage(p);
+  });
+  backBtn.disabled = true;
+  stagedList.onCountChange((n) => { backBtn.disabled = n === 0; });
+
+  const a2Body = staged.length ? h('div', {}, [stagedList.node]) : emptyNode('Nothing selected yet. Pick changes on the left.');
+  const a2Actions = [];
+  if (staged.length) {
+    a2Actions.push(actionButton('💾', 'Save a version', () => handlers.onSaveVersion(), true));
+    a2Actions.push(backBtn);
+  }
+  const a2Handle = staged.length ? dragHandle('staged-set', 'Drag onto “Saved on this computer” to save a version') : null;
+  const area2 = buildArea({
+    key: 'ready', icon: '🎯', title: 'Ready to save',
+    subtitle: 'Changes selected to be saved as a version.',
+    count: staged.length, body: a2Body, actions: a2Actions, handle: a2Handle,
+  });
+  makeDropZone(area2, ['file:working'], (p) => handlers.onStage([p.path]));
+
+  /* Area 3: Saved on this computer (local versions) */
+  const a3Actions = [];
+  if (details.hasRemote && details.ahead > 0) {
+    a3Actions.push(actionButton('⬆️', `Upload ${details.ahead} saved version${details.ahead === 1 ? '' : 's'}`, () => handlers.onUpload(), true));
+  }
+  const a3Handle = details.hasRemote && details.ahead > 0 ? dragHandle('local-commits', 'Drag onto “Online repository” to upload') : null;
+  const area3 = buildArea({
+    key: 'saved', icon: '💾', title: 'Saved on this computer',
+    subtitle: 'Versions already saved here.',
+    count: history.length, dim: history.length === 0, body: renderTimeline(history), actions: a3Actions, handle: a3Handle,
+  });
+  makeDropZone(area3, ['staged-set'], () => handlers.onSaveVersion());
+
+  /* Area 4: Online repository (remote) */
+  const a4Actions = [];
+  if (details.hasRemote) {
+    if (details.behind > 0) a4Actions.push(actionButton('⬇️', `Download ${details.behind} newer version${details.behind === 1 ? '' : 's'}`, () => handlers.onDownload(), true));
+    if (details.ahead > 0) a4Actions.push(actionButton('⬆️', 'Upload saved versions', () => handlers.onUpload()));
+    if (details.browserUrl) a4Actions.push(actionButton('🔗', 'Open online repository', () => handlers.onOpenRemote()));
+  }
+  const area4 = buildArea({
+    key: 'online', icon: '☁️', title: 'Online repository',
+    subtitle: 'Versions uploaded online.',
+    count: null, dim: !details.hasRemote, body: renderOnlineCard(details), actions: a4Actions,
+  });
+  makeDropZone(area4, ['local-commits'], () => handlers.onUpload());
+
+  return h('div', { className: 'flow' }, [area1, flowArrow(), area2, flowArrow(), area3, flowArrow(), area4]);
 }
 
 /* ------------------------------------------------------------------ */

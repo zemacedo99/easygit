@@ -295,11 +295,12 @@ async function fetch(repoPath) {
 
 /**
  * Recent history as a short, friendly list.
- * @returns {Promise<{ok: boolean, entries: Array<{hash: string, when: string, author: string, subject: string}>}>}
+ * @returns {Promise<{ok: boolean, entries: Array<{full: string, hash: string, when: string, author: string, subject: string}>}>}
  */
 async function getRecentHistory(repoPath, limit = 5) {
   // Use a unit-separator-delimited format so subjects with weird chars are safe.
-  const fmt = '%h\x1f%cr\x1f%an\x1f%s';
+  // %H = full hash (used to match against unpushed commits), %h = short hash.
+  const fmt = '%H\x1f%h\x1f%cr\x1f%an\x1f%s';
   const res = await runGit(repoPath, ['log', `-n${limit}`, `--pretty=format:${fmt}`]);
   if (!res.ok) return { ok: false, entries: [] };
 
@@ -308,10 +309,147 @@ async function getRecentHistory(repoPath, limit = 5) {
     .map((l) => l.replace(/\r$/, ''))
     .filter(Boolean)
     .map((line) => {
-      const [hash, when, author, subject] = line.split('\x1f');
-      return { hash, when, author, subject };
+      const [full, hash, when, author, subject] = line.split('\x1f');
+      return { full, hash, when, author, subject };
     });
   return { ok: true, entries };
+}
+
+/**
+ * Detailed working/index status using porcelain v1 with NUL separators so file
+ * names with spaces or unusual characters are handled safely. Splits changes
+ * into three buckets so the UI can show "this computer" vs "ready to save" vs
+ * "needs attention".
+ *
+ * @returns {Promise<{ok: boolean, staged: object[], working: object[], conflicted: object[], errorCode: string|null}>}
+ *   staged/working items: { path, type, orig? }   conflicted items: { path }
+ */
+async function getDetailedStatus(repoPath) {
+  const res = await runGit(repoPath, ['status', '--porcelain=v1', '-z']);
+  if (!res.ok) return { ok: false, staged: [], working: [], conflicted: [], errorCode: res.errorCode };
+
+  const staged = [];
+  const working = [];
+  const conflicted = [];
+
+  const tokens = res.stdout.split('\0');
+  for (let i = 0; i < tokens.length; i++) {
+    const entry = tokens[i];
+    if (!entry || entry.length < 3) continue;
+
+    const x = entry[0];
+    const y = entry[1];
+    const code = x + y;
+    const filePath = entry.slice(3);
+
+    // Renames / copies in the index carry a second token: the original path.
+    let orig = null;
+    if (x === 'R' || x === 'C') {
+      orig = tokens[i + 1] || null;
+      i++; // consume the original-path token
+    }
+
+    // Unmerged / conflicting entries (a person must resolve these).
+    if (code === 'DD' || code === 'AA' || x === 'U' || y === 'U') {
+      conflicted.push({ path: filePath });
+      continue;
+    }
+
+    // Untracked (brand new) file.
+    if (code === '??') {
+      working.push({ path: filePath, type: 'untracked' });
+      continue;
+    }
+
+    // Ignored files never appear without --ignored, but guard anyway.
+    if (code === '!!') continue;
+
+    // X = staged side, Y = working-tree side. A file can be in both.
+    if (x !== ' ' && x !== '?') {
+      staged.push({ path: filePath, type: mapStatusCode(x), orig });
+    }
+    if (y !== ' ' && y !== '?') {
+      working.push({ path: filePath, type: mapStatusCode(y), orig });
+    }
+  }
+
+  return { ok: true, staged, working, conflicted, errorCode: null };
+}
+
+/** Map a single porcelain status letter to a friendly change-type code. */
+function mapStatusCode(c) {
+  switch (c) {
+    case 'A': return 'added';
+    case 'M': return 'modified';
+    case 'D': return 'deleted';
+    case 'R': return 'renamed';
+    case 'C': return 'copied';
+    case 'T': return 'typechange';
+    default: return 'modified';
+  }
+}
+
+/** The upstream (online) branch name, e.g. "origin/main", or null if none. */
+async function getUpstreamName(repoPath) {
+  const res = await runGit(repoPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  return res.ok ? res.stdout.trim() : null;
+}
+
+/**
+ * Full hashes of local commits that have NOT been uploaded yet (ahead of
+ * upstream). Returns null when there is no upstream to compare against.
+ * @returns {Promise<Set<string>|null>}
+ */
+async function getUnpushedHashes(repoPath) {
+  const res = await runGit(repoPath, ['rev-list', '@{u}..HEAD']);
+  if (!res.ok) return null;
+  return new Set(res.stdout.split('\n').map((s) => s.trim()).filter(Boolean));
+}
+
+/** Local branch names (current line of work + others). */
+async function listBranches(repoPath) {
+  const res = await runGit(repoPath, ['branch', '--format=%(refname:short)']);
+  if (!res.ok) return [];
+  return res.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
+// --- Staging / selection commands (always from an explicit user action) ------
+
+/** Move specific files into "ready to save" (stage). Handles deletes too. */
+async function stageFiles(repoPath, paths) {
+  if (!paths || paths.length === 0) return { ok: false, errorCode: GitErrorCode.UNKNOWN };
+  const res = await runGit(repoPath, ['add', '--', ...paths]);
+  return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
+}
+
+/** Stage everything ("select all changes to save"). */
+async function stageAll(repoPath) {
+  const res = await runGit(repoPath, ['add', '-A']);
+  return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
+}
+
+/** Move specific files back out of "ready to save" (unstage), non-destructively. */
+async function unstageFiles(repoPath, paths) {
+  if (!paths || paths.length === 0) return { ok: false, errorCode: GitErrorCode.UNKNOWN };
+  // `git restore --staged` (Git 2.23+) only touches the index, never the file.
+  let res = await runGit(repoPath, ['restore', '--staged', '--', ...paths]);
+  if (!res.ok) {
+    // Fallback for very old Git: reset only the index entry (also non-destructive).
+    res = await runGit(repoPath, ['reset', '-q', 'HEAD', '--', ...paths]);
+  }
+  return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
+}
+
+/** Commit ONLY what is staged (does not touch unstaged changes). */
+async function commitStaged(repoPath, message) {
+  const res = await runGit(repoPath, ['commit', '-m', message]);
+  return { ok: res.ok, errorCode: res.errorCode, stdout: res.stdout, stderr: res.stderr };
+}
+
+/** Switch to an existing local branch (never creates or deletes). */
+async function switchBranch(repoPath, name) {
+  const res = await runGit(repoPath, ['checkout', name]);
+  return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
 }
 
 // --- Action commands (only ever called from an explicit user button click) ---
@@ -348,10 +486,19 @@ module.exports = {
   getCurrentBranch,
   getRemoteUrl,
   getLocalChanges,
+  getDetailedStatus,
   getAheadBehind,
+  getUpstreamName,
+  getUnpushedHashes,
+  listBranches,
   fetch,
   getRecentHistory,
   commitAll,
+  stageFiles,
+  stageAll,
+  unstageFiles,
+  commitStaged,
+  switchBranch,
   pull,
   push,
   // exposed for callers that want to name a folder

@@ -99,29 +99,50 @@ const FACTS = {
   r6: { hasRemote: false, hasUpstream: false, localChangeCount: 2, ahead: 0, behind: 0, fetched: false },
 };
 
-const FILES = {
-  r2: [
-    { path: 'src/screens/LoginScreen.js', kind: 'Edited' },
-    { path: 'assets/logo-new.png', kind: 'New file (not tracked yet)' },
-  ],
-  r5: [
-    { path: 'Q1-budget.xlsx', kind: 'Edited' },
-    { path: 'Q2-budget.xlsx', kind: 'Edited' },
-    { path: 'notes.txt', kind: 'New file (not tracked yet)' },
-  ],
-  r6: [
-    { path: 'summer/IMG_2043.jpg', kind: 'New file (not tracked yet)' },
-    { path: 'captions.docx', kind: 'Edited' },
-  ],
+// Per-repo working/staged/conflicted file models (the new details flow).
+const FILE_MODELS = {
+  r2: {
+    working: [
+      { path: 'src/screens/LoginScreen.js', type: 'modified' },
+      { path: 'assets/logo-new.png', type: 'untracked' },
+      { path: 'README.md', type: 'modified' },
+    ],
+    staged: [{ path: 'src/theme/colors.js', type: 'modified' }],
+    conflicted: [],
+  },
+  r5: {
+    working: [
+      { path: 'Q1-budget.xlsx', type: 'modified' },
+      { path: 'Q2-budget.xlsx', type: 'modified' },
+      { path: 'notes.txt', type: 'untracked' },
+    ],
+    staged: [],
+    conflicted: [],
+  },
+};
+
+const BRANCHES = {
+  r2: ['main', 'feature/login', 'bugfix/crash'],
 };
 
 const HISTORY = {
   r2: [
     { hash: 'a1b2c3d', when: '2 hours ago', author: 'You', subject: 'Fix login button alignment' },
-    { hash: '9f8e7d6', when: 'yesterday', author: 'Maria', subject: 'Add dark mode colours' },
-    { hash: '4c3b2a1', when: '3 days ago', author: 'You', subject: 'Set up the mobile app project' },
+    { hash: '9f8e7d6', when: 'yesterday', author: 'You', subject: 'Add dark mode colours' },
+    { hash: '4c3b2a1', when: '3 days ago', author: 'Maria', subject: 'Set up the mobile app project' },
+    { hash: '7d6e5f4', when: 'last week', author: 'Maria', subject: 'First version' },
   ],
 };
+
+// Mutable per-repo file state so stage/unstage actually move items in the demo.
+const MUT = {};
+function getMut(id) {
+  if (!MUT[id]) {
+    const m = FILE_MODELS[id];
+    MUT[id] = m ? JSON.parse(JSON.stringify(m)) : { working: [], staged: [], conflicted: [] };
+  }
+  return MUT[id];
+}
 
 // --- decoration (mirrors repoManager.decorate) -----------------------------
 
@@ -138,15 +159,51 @@ function decorate(repo) {
 }
 
 function buildDetails(repo) {
-  const facts = FACTS[repo.id] || { hasRemote: !!repo.remoteUrl, hasUpstream: !!repo.remoteUrl, localChangeCount: 0, ahead: 0, behind: 0, fetched: true };
-  const interpreted = interpreter.interpret(facts);
+  const facts = FACTS[repo.id] || { hasRemote: !!repo.remoteUrl, hasUpstream: !!repo.remoteUrl, ahead: 0, behind: 0, fetched: true };
+  const mut = getMut(repo.id);
+  const interpreted = interpreter.interpret({
+    hasRemote: facts.hasRemote,
+    hasUpstream: facts.hasUpstream,
+    localChangeCount: mut.working.length + mut.staged.length + mut.conflicted.length,
+    workingCount: mut.working.length,
+    stagedCount: mut.staged.length,
+    conflictedCount: mut.conflicted.length,
+    untrackedCount: mut.working.filter((f) => f.type === 'untracked').length,
+    ahead: facts.ahead,
+    behind: facts.behind,
+    fetched: facts.fetched,
+  });
+  const history = (HISTORY[repo.id] || []).map((h, i) => ({
+    full: 'full-' + repo.id + '-' + i,
+    hash: h.hash,
+    when: h.when,
+    author: h.author,
+    subject: h.subject,
+    local: i < (facts.ahead || 0), // the newest `ahead` versions are local-only
+  }));
   return {
     ...interpreted,
     branch: repo.branch,
-    files: FILES[repo.id] || [],
-    history: HISTORY[repo.id] || [],
+    branches: BRANCHES[repo.id] || [repo.branch],
+    upstream: facts.hasUpstream ? `origin/${repo.branch}` : null,
+    hasRemote: facts.hasRemote,
+    remoteUrl: repo.remoteUrl,
+    provider: urls.providerName(repo.remoteUrl),
+    browserUrl: urls.toBrowserUrl(repo.remoteUrl),
     ahead: facts.ahead,
     behind: facts.behind,
+    fetched: facts.fetched,
+    lastChecked: new Date().toISOString(),
+    working: mut.working,
+    staged: mut.staged,
+    conflicted: mut.conflicted,
+    history,
+    counts: {
+      working: mut.working.length,
+      staged: mut.staged.length,
+      conflicted: mut.conflicted.length,
+      history: history.length,
+    },
     fetchError: null,
   };
 }
@@ -265,6 +322,40 @@ window.easygit = {
   download: async () => ({ ok: true, message: 'You now have the latest version from online.' }),
   upload: async () => ({ ok: true, message: 'Your saved changes were uploaded to the online repository.' }),
   hasUnsaved: async (id) => id === 'r2', // mobile-app has unsaved changes -> triggers the warning
+
+  // Selection / staging (mutate the in-memory model so the flow is interactive)
+  stage: async (id, paths) => {
+    const m = getMut(id);
+    const moved = m.working.filter((f) => paths.includes(f.path));
+    m.working = m.working.filter((f) => !paths.includes(f.path));
+    m.staged.push(...moved.map((f) => ({ ...f, type: f.type === 'untracked' ? 'added' : f.type })));
+    return { ok: true };
+  },
+  stageAll: async (id) => {
+    const m = getMut(id);
+    m.staged.push(...m.working.map((f) => ({ ...f, type: f.type === 'untracked' ? 'added' : f.type })));
+    m.working = [];
+    return { ok: true };
+  },
+  unstage: async (id, paths) => {
+    const m = getMut(id);
+    const moved = m.staged.filter((f) => paths.includes(f.path));
+    m.staged = m.staged.filter((f) => !paths.includes(f.path));
+    m.working.push(...moved);
+    return { ok: true };
+  },
+  commitStaged: async (id, message) => {
+    const m = getMut(id);
+    if (!m.staged.length) return { ok: false, error: { title: 'Nothing selected to save', detail: 'Move at least one change into “Ready to save” first.' } };
+    m.staged = [];
+    return { ok: true, message: 'Your version was saved on this computer.' };
+  },
+  switchBranch: async (id, name) => {
+    const r = repos.find((x) => x.id === id);
+    if (r) r.branch = name;
+    return { ok: true, message: `You are now on version line “${name}”.` };
+  },
+  revealFile: async () => ({ ok: true }),
 
   pickFolder: async (title) => {
     if (title && title.toLowerCase().includes('scan')) return 'C:\\Users\\alex\\Dev';

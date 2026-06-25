@@ -60,48 +60,60 @@ function decideStatus(f) {
 function buildExplanation(status, f) {
   const sentences = [];
 
-  // 1) Local situation
-  if (f.localChangeCount > 0) {
+  // Use the detailed working/staged/conflicted counts when available; fall back
+  // to the single localChangeCount for older callers.
+  const hasDetailed =
+    f.workingCount != null || f.stagedCount != null || f.conflictedCount != null;
+  const working = hasDetailed ? num(f.workingCount) : num(f.localChangeCount);
+  const staged = num(f.stagedCount);
+  const conflicted = num(f.conflictedCount);
+  const totalLocal = working + staged + conflicted;
+
+  // 1) Conflicts first – they need a person.
+  if (conflicted > 0) {
     sentences.push(
-      `This repository has ${pluralize(f.localChangeCount, 'change', 'changes')} on this computer that ${
-        f.localChangeCount === 1 ? 'has' : 'have'
-      } not been saved as a version yet. You should save a version before uploading.`
+      `${cap(pluralize(conflicted, 'file has', 'files have'))} conflicting changes that need a person to help. EasyGit will not change them automatically.`
     );
   }
 
-  // 2) No online repo
+  // 2) Local situation: unsaved changes and selected (ready-to-save) changes.
+  if (working > 0) {
+    sentences.push(
+      `You changed ${pluralize(working, 'file', 'files')} on this computer. Select the ones you want to save.`
+    );
+  }
+  if (staged > 0) {
+    sentences.push(
+      `${pluralize(staged, 'change is', 'changes are')} ready to save as a version.`
+    );
+  }
+
+  // 3) No online repo
   if (!f.hasRemote) {
     sentences.push(
-      'This repository is not connected to an online repository, so there is nothing to upload to or download from yet.'
+      'This project is not connected to an online repository, so there is nothing to upload or download yet.'
     );
-    if (f.localChangeCount === 0) {
-      sentences.push('There are no local changes right now.');
-    }
+    if (totalLocal === 0) sentences.push('There are no changes on this computer right now.');
     return sentences.join(' ');
   }
 
-  // 3) Online comparison
-  if (!f.fetched) {
-    sentences.push(
-      'EasyGit could not refresh the online information this time, so the comparison below may be out of date. Use “Check online version” to try again.'
-    );
-  }
-
+  // 4) Online comparison. (A failed online refresh is shown on the online
+  // card, not repeated here, to keep the banner calm.)
   if (f.ahead > 0 && f.behind > 0) {
     sentences.push(
-      `You have ${pluralize(f.ahead, 'saved version', 'saved versions')} on this computer that ${
+      `You have ${pluralize(f.ahead, 'saved version', 'saved versions')} that ${
         f.ahead === 1 ? 'has' : 'have'
       } not been uploaded yet, and there ${f.behind === 1 ? 'is' : 'are'} also ${pluralize(
         f.behind,
         'newer version',
         'newer versions'
-      )} available online. It is usually safest to download the latest version first, then upload yours.`
+      )} online. It is usually safest to download the latest version first, then upload yours.`
     );
   } else if (f.ahead > 0) {
     sentences.push(
-      `You have ${pluralize(f.ahead, 'saved version', 'saved versions')} on this computer that ${
+      `You have ${pluralize(f.ahead, 'saved version', 'saved versions')} that ${
         f.ahead === 1 ? 'has' : 'have'
-      } not been uploaded yet. You can upload your saved changes when you are ready.`
+      } not been uploaded yet.`
     );
   } else if (f.behind > 0) {
     sentences.push(
@@ -109,10 +121,10 @@ function buildExplanation(status, f) {
         f.behind,
         'newer version',
         'newer versions'
-      )} available online. You can download the latest version to get up to date.`
+      )} online. Download ${f.behind === 1 ? 'it' : 'them'} before continuing.`
     );
-  } else if (f.localChangeCount === 0) {
-    sentences.push('Everything is updated. No action is needed.');
+  } else if (totalLocal === 0) {
+    sentences.push('Everything is up to date. No action is needed.');
   }
 
   return sentences.join(' ');
@@ -153,10 +165,14 @@ function interpret(facts) {
   const status = decideStatus(facts);
   const info = STATUS_INFO[status];
 
-  const localSummary =
-    facts.localChangeCount > 0
-      ? `${pluralize(facts.localChangeCount, 'file changed', 'files changed')} on this computer.`
-      : 'Everything is clean. No local changes.';
+  const working = facts.workingCount != null ? facts.workingCount : facts.localChangeCount || 0;
+  const staged = num(facts.stagedCount);
+  const summaryParts = [];
+  if (working > 0) summaryParts.push(`${pluralize(working, 'file', 'files')} changed`);
+  if (staged > 0) summaryParts.push(`${staged} ready to save`);
+  const localSummary = summaryParts.length
+    ? `${summaryParts.join(', ')}.`
+    : 'Everything is clean. No changes on this computer.';
 
   return {
     status,
@@ -171,6 +187,16 @@ function interpret(facts) {
 /** Tiny helper: "1 change" / "3 changes". */
 function pluralize(n, singular, plural) {
   return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/** Coerce to a finite number (0 when missing). */
+function num(x) {
+  return Number.isFinite(x) ? x : 0;
+}
+
+/** Capitalise the first letter. */
+function cap(s) {
+  return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 module.exports = { interpret, decideStatus, buildExplanation };

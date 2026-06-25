@@ -164,6 +164,21 @@ function registerIpcHandlers() {
   ipcMain.handle('repos:upload', async (_e, id) => repoManager.upload(id));
   ipcMain.handle('repos:hasUnsaved', async (_e, id) => repoManager.hasUnsavedChanges(id));
 
+  // --- Selection / staging / saving (details screen) -----------------------
+  ipcMain.handle('repos:stage', async (_e, id, paths) => repoManager.stageFiles(id, paths));
+  ipcMain.handle('repos:stageAll', async (_e, id) => repoManager.stageAll(id));
+  ipcMain.handle('repos:unstage', async (_e, id, paths) => repoManager.unstageFiles(id, paths));
+  ipcMain.handle('repos:commitStaged', async (_e, id, message) => repoManager.commitStaged(id, message));
+  ipcMain.handle('repos:switchBranch', async (_e, id, name) => repoManager.switchBranch(id, name));
+
+  // Reveal a specific file in the system file explorer.
+  ipcMain.handle('repos:revealFile', async (_e, id, relPath) => {
+    const repoPath = repoManager.getRepoPath(id);
+    if (!repoPath) return { ok: false, error: 'Repository not found.' };
+    shell.showItemInFolder(path.join(repoPath, relPath));
+    return { ok: true };
+  });
+
   // --- OS integrations -----------------------------------------------------
 
   // Native folder picker. Returns the chosen absolute path, or null if cancelled.
