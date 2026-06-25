@@ -1,0 +1,281 @@
+'use strict';
+
+/**
+ * demo/mock-preload.js  (DEMO ONLY — not part of the shipped app)
+ * --------------------------------------------------------------
+ * A stand-in for the real preload bridge, used purely to capture screenshots.
+ *
+ * It exposes the SAME `window.easygit` API the real app uses, but backed by
+ * in-memory sample data instead of real Git/IPC. This lets us render the REAL
+ * UI (index.html / styles.css / app.js / ui.js) with realistic content, with no
+ * real repositories or native dialogs required.
+ *
+ * It reuses the app's OWN friendly-text modules so the wording is identical to
+ * production: messages.js (status labels), urls.js (remote links),
+ * statusInterpreter.js (explanations).
+ */
+
+const path = require('path');
+const fs = require('fs');
+
+const { STATUS_INFO, Status } = require('../src/main/messages');
+const urls = require('../src/main/urls');
+const interpreter = require('../src/main/statusInterpreter');
+
+const SEED_FLAG = path.join(__dirname, '.seed');
+
+// --- sample data -----------------------------------------------------------
+
+function minutesAgo(m) {
+  return new Date(Date.now() - m * 60000).toISOString();
+}
+
+function buildSamples() {
+  return [
+    {
+      id: 'r1',
+      name: 'company-website',
+      path: 'C:\\Users\\alex\\Documents\\company-website',
+      branch: 'main',
+      lastStatus: Status.NEEDS_DOWNLOAD,
+      remoteUrl: 'git@github.com:acme/company-website.git',
+      lastChecked: minutesAgo(8),
+    },
+    {
+      id: 'r2',
+      name: 'mobile-app',
+      path: 'C:\\Users\\alex\\Dev\\mobile-app',
+      branch: 'main',
+      lastStatus: Status.NEEDS_UPLOAD_AND_DOWNLOAD,
+      remoteUrl: 'https://github.com/acme/mobile-app.git',
+      lastChecked: minutesAgo(3),
+    },
+    {
+      id: 'r3',
+      name: 'research-notes',
+      path: 'C:\\Users\\alex\\Documents\\research-notes',
+      branch: 'main',
+      lastStatus: Status.UP_TO_DATE,
+      remoteUrl: 'git@gitlab.com:team/research-notes.git',
+      lastChecked: minutesAgo(15),
+    },
+    {
+      id: 'r4',
+      name: 'old-archive',
+      path: 'C:\\Users\\alex\\Desktop\\old-archive',
+      branch: 'main',
+      lastStatus: Status.NEEDS_UPLOAD,
+      remoteUrl: 'https://bitbucket.org/acme/old-archive.git',
+      lastChecked: minutesAgo(120),
+    },
+    {
+      id: 'r5',
+      name: 'budget-2026',
+      path: 'C:\\Users\\alex\\Documents\\budget-2026',
+      branch: 'main',
+      lastStatus: Status.LOCAL_CHANGES,
+      remoteUrl: 'https://github.com/acme/budget-2026.git',
+      lastChecked: minutesAgo(40),
+    },
+    {
+      id: 'r6',
+      name: 'holiday-photos-project',
+      path: 'C:\\Users\\alex\\Pictures\\holiday-photos-project',
+      branch: 'main',
+      lastStatus: Status.NO_REMOTE,
+      remoteUrl: null,
+      lastChecked: minutesAgo(1440),
+    },
+  ];
+}
+
+// Per-repo "facts" used to build a realistic details panel on demand.
+const FACTS = {
+  r1: { hasRemote: true, hasUpstream: true, localChangeCount: 0, ahead: 0, behind: 3, fetched: true },
+  r2: { hasRemote: true, hasUpstream: true, localChangeCount: 2, ahead: 2, behind: 1, fetched: true },
+  r3: { hasRemote: true, hasUpstream: true, localChangeCount: 0, ahead: 0, behind: 0, fetched: true },
+  r4: { hasRemote: true, hasUpstream: true, localChangeCount: 0, ahead: 5, behind: 0, fetched: true },
+  r5: { hasRemote: true, hasUpstream: true, localChangeCount: 3, ahead: 0, behind: 0, fetched: true },
+  r6: { hasRemote: false, hasUpstream: false, localChangeCount: 2, ahead: 0, behind: 0, fetched: false },
+};
+
+const FILES = {
+  r2: [
+    { path: 'src/screens/LoginScreen.js', kind: 'Edited' },
+    { path: 'assets/logo-new.png', kind: 'New file (not tracked yet)' },
+  ],
+  r5: [
+    { path: 'Q1-budget.xlsx', kind: 'Edited' },
+    { path: 'Q2-budget.xlsx', kind: 'Edited' },
+    { path: 'notes.txt', kind: 'New file (not tracked yet)' },
+  ],
+  r6: [
+    { path: 'summer/IMG_2043.jpg', kind: 'New file (not tracked yet)' },
+    { path: 'captions.docx', kind: 'Edited' },
+  ],
+};
+
+const HISTORY = {
+  r2: [
+    { hash: 'a1b2c3d', when: '2 hours ago', author: 'You', subject: 'Fix login button alignment' },
+    { hash: '9f8e7d6', when: 'yesterday', author: 'Maria', subject: 'Add dark mode colours' },
+    { hash: '4c3b2a1', when: '3 days ago', author: 'You', subject: 'Set up the mobile app project' },
+  ],
+};
+
+// --- decoration (mirrors repoManager.decorate) -----------------------------
+
+function decorate(repo) {
+  const info = STATUS_INFO[repo.lastStatus] || STATUS_INFO[Status.UNKNOWN];
+  return {
+    ...repo,
+    statusLabel: info.label,
+    statusTone: info.tone,
+    statusShort: info.short,
+    browserUrl: urls.toBrowserUrl(repo.remoteUrl),
+    provider: urls.providerName(repo.remoteUrl),
+  };
+}
+
+function buildDetails(repo) {
+  const facts = FACTS[repo.id] || { hasRemote: !!repo.remoteUrl, hasUpstream: !!repo.remoteUrl, localChangeCount: 0, ahead: 0, behind: 0, fetched: true };
+  const interpreted = interpreter.interpret(facts);
+  return {
+    ...interpreted,
+    branch: repo.branch,
+    files: FILES[repo.id] || [],
+    history: HISTORY[repo.id] || [],
+    ahead: facts.ahead,
+    behind: facts.behind,
+    fetchError: null,
+  };
+}
+
+// --- mutable state ---------------------------------------------------------
+
+let repos = fs.existsSync(SEED_FLAG) ? buildSamples() : [];
+let addMode = 'valid';
+const progressListeners = [];
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// --- the API the renderer talks to ----------------------------------------
+
+window.easygit = {
+  checkGitInstalled: async () => ({ installed: true, version: 'git version 2.33.0' }),
+  getStoragePath: async () => 'C:\\Users\\alex\\AppData\\Roaming\\easygit\\repositories.json',
+
+  listRepos: async () => repos.map(decorate),
+  removeRepo: async (id) => {
+    repos = repos.filter((r) => r.id !== id);
+    return { ok: true };
+  },
+  renameRepo: async (id, name) => {
+    const r = repos.find((x) => x.id === id);
+    if (r) r.name = name;
+    return { ok: true, repo: decorate(r) };
+  },
+
+  addRepo: async (folderPath) => {
+    if (addMode === 'invalid') {
+      return {
+        ok: false,
+        error: {
+          title: 'Not a Git repository',
+          detail:
+            'This folder does not look like a Git repository. Choose another folder, or create a Git repository here first.',
+        },
+      };
+    }
+    const repo = {
+      id: 'added-' + (repos.length + 1),
+      name: 'invoice-generator',
+      path: 'C:\\Users\\alex\\Desktop\\invoice-generator',
+      branch: 'main',
+      lastStatus: Status.UNKNOWN,
+      remoteUrl: 'https://github.com/acme/invoice-generator.git',
+      lastChecked: null,
+    };
+    repos.push(repo);
+    return { ok: true, repo: decorate(repo) };
+  },
+  addManyRepos: async (paths) => ({ added: paths.map((p) => ({ name: p })), skipped: 0 }),
+
+  scan: async () => ({
+    found: [
+      { name: 'company-website', path: 'C:\\Users\\alex\\Dev\\company-website', alreadyAdded: true },
+      { name: 'invoice-generator', path: 'C:\\Users\\alex\\Dev\\invoice-generator', alreadyAdded: false },
+      { name: 'portfolio-site', path: 'C:\\Users\\alex\\Dev\\portfolio-site', alreadyAdded: false },
+      { name: 'data-scripts', path: 'C:\\Users\\alex\\Dev\\tools\\data-scripts', alreadyAdded: false },
+    ],
+    scannedFolders: 214,
+    errors: [],
+  }),
+
+  checkOne: async (id) => {
+    await delay(450); // let the "Checking…" badge show briefly
+    const repo = repos.find((r) => r.id === id);
+    if (!repo) return { ok: false, error: { title: 'Not found', detail: 'Gone.' } };
+    repo.lastChecked = new Date().toISOString();
+    return { ok: true, repo: decorate(repo), details: buildDetails(repo) };
+  },
+
+  checkAll: async () => {
+    const total = repos.length;
+    let done = 0;
+    for (const repo of repos) {
+      await delay(250);
+      repo.lastChecked = new Date().toISOString();
+      done++;
+      const result = { ok: true, repo: decorate(repo), details: buildDetails(repo) };
+      progressListeners.forEach((cb) => cb({ id: repo.id, done, total, result }));
+    }
+    return { total, checked: done, byStatus: {} };
+  },
+  onCheckProgress: (cb) => {
+    progressListeners.push(cb);
+    return () => {
+      const i = progressListeners.indexOf(cb);
+      if (i >= 0) progressListeners.splice(i, 1);
+    };
+  },
+
+  saveVersion: async () => ({ ok: true, message: 'Your version was saved on this computer.' }),
+  download: async () => ({ ok: true, message: 'You now have the latest version from online.' }),
+  upload: async () => ({ ok: true, message: 'Your saved changes were uploaded to the online repository.' }),
+  hasUnsaved: async (id) => id === 'r2', // mobile-app has unsaved changes -> triggers the warning
+
+  pickFolder: async (title) => {
+    if (title && title.toLowerCase().includes('scan')) return 'C:\\Users\\alex\\Dev';
+    return addMode === 'invalid'
+      ? 'C:\\Users\\alex\\Documents\\just-a-folder'
+      : 'C:\\Users\\alex\\Desktop\\invoice-generator';
+  },
+  openFolder: async () => ({ ok: true }),
+  openRemote: async () => ({ ok: true, url: 'https://github.com/acme/mobile-app' }),
+};
+
+// --- helpers the screenshot driver (shoot.js) uses -------------------------
+
+window.__demo = {
+  setAddMode: (m) => {
+    addMode = m;
+  },
+  clickByText: (text) => {
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().includes(text));
+    if (btn) btn.click();
+    return !!btn;
+  },
+  clickRepoByName: (name) => {
+    const cards = [...document.querySelectorAll('.repo-card')];
+    const card = cards.find((c) => {
+      const n = c.querySelector('.repo-name');
+      return n && n.textContent.trim() === name;
+    });
+    if (card) card.click();
+    return !!card;
+  },
+  closeModal: () => {
+    const o = document.querySelector('.modal-overlay');
+    if (o) o.remove();
+  },
+};

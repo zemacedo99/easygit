@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Lock down what the renderer can do. No remote content, no inline eval. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EasyGit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- ===================== Top bar ===================== -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">EG</div>
+        <div class="brand-text">
+          <h1>EasyGit</h1>
+          <p>Manage your projects without learning Git</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button id="btn-scan" class="btn btn-primary">
+          <span class="btn-icon">🔍</span> Find repositories on this PC
+        </button>
+        <button id="btn-add" class="btn btn-primary">
+          <span class="btn-icon">➕</span> Add repository folder
+        </button>
+        <button id="btn-check-all" class="btn btn-accent">
+          <span class="btn-icon">🔄</span> Check if everything is updated
+        </button>
+      </div>
+    </header>
+
+    <!-- Warning shown if Git is not installed -->
+    <div id="git-warning" class="banner banner-error" hidden>
+      <strong>Git is not installed.</strong>
+      EasyGit needs Git on this computer to work. Please install Git and restart EasyGit.
+    </div>
+
+    <!-- Progress + global summary for "Check if everything is updated" -->
+    <div id="global-status" class="banner banner-info" hidden>
+      <span id="global-status-text"></span>
+      <div class="progress-track" id="progress-track" hidden>
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- ===================== Main area ===================== -->
+    <main class="layout">
+      <!-- Left: repository list -->
+      <section class="panel panel-list" aria-label="Your repositories">
+        <div class="panel-header">
+          <h2>Your repositories</h2>
+          <span id="repo-count" class="pill">0</span>
+        </div>
+        <div id="repo-list" class="repo-list">
+          <!-- Repository cards are rendered here -->
+        </div>
+        <div id="empty-state" class="empty-state">
+          <div class="empty-emoji">📁</div>
+          <h3>No repositories yet</h3>
+          <p>
+            Use <strong>“Find repositories on this PC”</strong> to scan a folder,
+            or <strong>“Add repository folder”</strong> to add one yourself.
+          </p>
+        </div>
+      </section>
+
+      <!-- Right: details for the selected repository -->
+      <section class="panel panel-details" aria-label="Repository details">
+        <div id="details-empty" class="empty-state">
+          <div class="empty-emoji">👈</div>
+          <h3>Select a repository</h3>
+          <p>Choose a repository on the left to see its details and available actions.</p>
+        </div>
+        <div id="details" class="details" hidden>
+          <!-- Details are rendered here -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- Modal host -->
+    <div id="modal-root"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

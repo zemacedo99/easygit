@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# Build output (for future packaging)
+dist/
+out/
+
+# Local runtime data (EasyGit stores its repo list in the OS userData folder,
+# not here, but ignore any stray local copies just in case)
+repositories.json
+*.tmp

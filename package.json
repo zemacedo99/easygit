@@ -1,0 +1,23 @@
+{
+  "name": "easygit",
+  "version": "1.0.0",
+  "description": "A friendly desktop app that makes common Git operations easy for non-technical users by replacing Git jargon with clear, human-friendly actions.",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": [
+    "git",
+    "electron",
+    "gui",
+    "beginner",
+    "non-technical"
+  ],
+  "author": "EasyGit",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

@@ -1,0 +1,154 @@
+'use strict';
+
+/**
+ * main.js
+ * -------
+ * Electron main process entry point.
+ *
+ * Responsibilities:
+ *   - Create the application window.
+ *   - Initialise storage and the repository manager.
+ *   - Wire up IPC: the renderer (UI) talks to the app ONLY through these
+ *     channels, which delegate to repoManager. No git logic lives here.
+ *   - Provide OS integrations the UI cannot do on its own: native folder
+ *     pickers, opening the file explorer, and opening web links.
+ *
+ * Security: contextIsolation is ON and nodeIntegration is OFF. The renderer has
+ * no direct Node access; everything goes through the preload bridge + IPC.
+ */
+
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const path = require('path');
+
+const storage = require('./storage');
+const repoManager = require('./repoManager');
+const git = require('./gitService');
+const urls = require('./urls');
+
+let mainWindow = null;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1180,
+    height: 780,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'EasyGit',
+    backgroundColor: '#0f172a',
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  // Hide the default menu bar – non-technical users don't need it.
+  mainWindow.setMenuBarVisibility(false);
+
+  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  if (process.argv.includes('--dev')) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+}
+
+app.whenReady().then(() => {
+  // Persist data in the per-user app data folder.
+  storage.init(app.getPath('userData'));
+  repoManager.load();
+
+  registerIpcHandlers();
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+/**
+ * All IPC handlers. Each is a thin wrapper that calls repoManager and returns
+ * its result straight back to the renderer.
+ */
+function registerIpcHandlers() {
+  // --- Environment ---------------------------------------------------------
+  ipcMain.handle('git:checkInstalled', async () => git.checkGitInstalled());
+  ipcMain.handle('app:storagePath', async () => repoManager.getStoragePath());
+
+  // --- Repository list -----------------------------------------------------
+  ipcMain.handle('repos:list', async () => repoManager.listRepos());
+  ipcMain.handle('repos:remove', async (_e, id) => repoManager.removeRepo(id));
+  ipcMain.handle('repos:rename', async (_e, id, name) => repoManager.renameRepo(id, name));
+
+  // --- Add (manual) --------------------------------------------------------
+  ipcMain.handle('repos:add', async (_e, folderPath) => repoManager.addRepo(folderPath));
+  ipcMain.handle('repos:addMany', async (_e, folderPaths) => repoManager.addManyRepos(folderPaths));
+
+  // --- Scan ----------------------------------------------------------------
+  ipcMain.handle('repos:scan', async (_e, rootPath) => repoManager.scan(rootPath));
+
+  // --- Status checks -------------------------------------------------------
+  ipcMain.handle('repos:checkOne', async (_e, id, options) => repoManager.checkStatus(id, options || {}));
+
+  // Check ALL repositories, reporting progress to the UI as each one finishes
+  // so the list updates progressively and the UI never freezes.
+  ipcMain.handle('repos:checkAll', async (event) => {
+    const all = repoManager.listRepos();
+    const summary = { total: all.length, checked: 0, byStatus: {} };
+
+    for (const repo of all) {
+      const result = await repoManager.checkStatus(repo.id, { fetch: true });
+      summary.checked++;
+      if (result.ok) {
+        const s = result.repo.lastStatus;
+        summary.byStatus[s] = (summary.byStatus[s] || 0) + 1;
+      }
+      // Progressive update for this single repo.
+      event.sender.send('repos:checkProgress', {
+        id: repo.id,
+        done: summary.checked,
+        total: summary.total,
+        result,
+      });
+    }
+
+    return summary;
+  });
+
+  // --- Actions -------------------------------------------------------------
+  ipcMain.handle('repos:saveVersion', async (_e, id, message) => repoManager.saveVersion(id, message));
+  ipcMain.handle('repos:download', async (_e, id) => repoManager.download(id));
+  ipcMain.handle('repos:upload', async (_e, id) => repoManager.upload(id));
+  ipcMain.handle('repos:hasUnsaved', async (_e, id) => repoManager.hasUnsavedChanges(id));
+
+  // --- OS integrations -----------------------------------------------------
+
+  // Native folder picker. Returns the chosen absolute path, or null if cancelled.
+  ipcMain.handle('dialog:pickFolder', async (_e, title) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: title || 'Choose a folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Open a repository folder in the system file explorer.
+  ipcMain.handle('shell:openFolder', async (_e, folderPath) => {
+    const errorMessage = await shell.openPath(folderPath);
+    // openPath returns '' on success, or an error string on failure.
+    return { ok: errorMessage === '', error: errorMessage || null };
+  });
+
+  // Open the online repository in the default browser.
+  ipcMain.handle('shell:openRemote', async (_e, remoteUrl) => {
+    const web = urls.toBrowserUrl(remoteUrl);
+    if (!web) return { ok: false, error: 'No online repository link is available.' };
+    await shell.openExternal(web);
+    return { ok: true, url: web };
+  });
+}
