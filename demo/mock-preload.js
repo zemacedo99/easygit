@@ -158,6 +158,28 @@ let addMode = 'valid';
 const progressListeners = [];
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- auto-scan simulation (demo only) ---
+let scanCancelled = false;
+const scanProgressListeners = [];
+const SCAN_FINDINGS = [
+  { name: 'company-website', path: 'C:\\Users\\alex\\Dev\\company-website', alreadyAdded: true },
+  { name: 'invoice-generator', path: 'C:\\Users\\alex\\Dev\\invoice-generator', alreadyAdded: false },
+  { name: 'portfolio-site', path: 'C:\\Users\\alex\\Dev\\portfolio-site', alreadyAdded: false },
+  { name: 'data-scripts', path: 'C:\\Users\\alex\\Dev\\tools\\data-scripts', alreadyAdded: false },
+  { name: 'mobile-app', path: 'C:\\Users\\alex\\Dev\\mobile-app', alreadyAdded: true },
+  { name: 'experiments', path: 'C:\\Users\\alex\\Documents\\experiments', alreadyAdded: false },
+];
+const SCAN_STEPS = [
+  'C:\\Users\\alex\\Dev',
+  'C:\\Users\\alex\\Dev\\company-website',
+  'C:\\Users\\alex\\Documents\\Projects',
+  'C:\\Users\\alex\\Dev\\portfolio-site\\src',
+  'C:\\Users\\alex\\Source\\repos',
+  'C:\\Users\\alex\\Documents\\experiments',
+  'C:\\Users\\alex\\Dev\\tools',
+  'C:\\Users\\alex\\Desktop',
+];
+
 // --- the API the renderer talks to ----------------------------------------
 
 window.easygit = {
@@ -252,6 +274,42 @@ window.easygit = {
   },
   openFolder: async () => ({ ok: true }),
   openRemote: async () => ({ ok: true, url: 'https://github.com/acme/mobile-app' }),
+
+  autoScan: async () => {
+    scanCancelled = false;
+    let scanned = 0;
+    let found = 0;
+    for (let i = 0; i < SCAN_STEPS.length; i++) {
+      if (scanCancelled) break;
+      scanned += 37;
+      if (i % 2 === 1) found++;
+      scanProgressListeners.forEach((cb) => cb({ scannedFolders: scanned, found, currentPath: SCAN_STEPS[i] }));
+      await delay(280);
+    }
+    scanProgressListeners.forEach((cb) => cb({ scannedFolders: scanned, found, currentPath: null, done: true }));
+    const list = scanCancelled ? SCAN_FINDINGS.slice(0, 3) : SCAN_FINDINGS;
+    const newCount = list.filter((f) => !f.alreadyAdded).length;
+    return {
+      found: list,
+      roots: [],
+      scannedFolders: scanned,
+      cancelled: scanCancelled,
+      errorCount: 2,
+      limitReached: false,
+      summary: { total: list.length, new: newCount, already: list.length - newCount },
+    };
+  },
+  cancelScan: async () => {
+    scanCancelled = true;
+    return { ok: true };
+  },
+  onScanProgress: (cb) => {
+    scanProgressListeners.push(cb);
+    return () => {
+      const i = scanProgressListeners.indexOf(cb);
+      if (i >= 0) scanProgressListeners.splice(i, 1);
+    };
+  },
 };
 
 // --- helpers the screenshot driver (shoot.js) uses -------------------------

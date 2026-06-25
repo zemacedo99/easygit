@@ -93,22 +93,43 @@ async function onAdd() {
   ui.showToast({ type: 'success', title: 'Repository added', body: res.repo.name });
 }
 
-/** "Find repositories on this PC" – pick a folder, scan it, offer results. */
-async function onScan() {
-  const folder = await api.pickFolder('Choose a folder to scan for repositories');
-  if (!folder) return;
+/**
+ * "Auto-find Git repositories" – open the guided scan modal. The modal (ui.js)
+ * owns the step-by-step UI; here we just supply the IPC-backed handlers and keep
+ * the repo list in sync after adding.
+ */
+let scanModalOpen = false; // guards against opening a second scan at once
 
-  ui.showToast({ type: 'info', title: 'Scanning…', body: 'Looking for repositories. This may take a moment.' });
-  const result = await api.scan(folder);
+function onScan() {
+  if (scanModalOpen) return; // only one scan / scan modal at a time
+  scanModalOpen = true;
+  const btn = document.getElementById('btn-scan');
+  if (btn) btn.disabled = true;
 
-  ui.showScanResultsModal(result.found, result.scannedFolders, async (paths) => {
-    const added = await api.addManyRepos(paths);
-    await refreshRepos();
-    ui.showToast({
-      type: 'success',
-      title: 'Repositories added',
-      body: `Added ${added.added.length}${added.skipped ? `, skipped ${added.skipped}` : ''}.`,
-    });
+  ui.showAutoScanModal({
+    pickFolder: () => api.pickFolder('Choose a folder to search inside'),
+    startScan: (preset, customPath, onProgress) => {
+      // Subscribe to live progress for the duration of this scan only.
+      const unsubscribe = api.onScanProgress(onProgress);
+      return api.autoScan(preset, customPath).finally(() => unsubscribe());
+    },
+    cancelScan: () => api.cancelScan(),
+    addRepos: async (paths) => {
+      const added = await api.addManyRepos(paths);
+      await refreshRepos();
+      ui.showToast({
+        type: 'success',
+        title: 'Repositories added',
+        body: `Added ${added.added.length} repositor${added.added.length === 1 ? 'y' : 'ies'}${
+          added.skipped ? `, skipped ${added.skipped}` : ''
+        }.`,
+      });
+      return added;
+    },
+    onClose: () => {
+      scanModalOpen = false;
+      if (btn) btn.disabled = false;
+    },
   });
 }
 

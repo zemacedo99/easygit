@@ -81,7 +81,7 @@ npm run dev
 
 | Button | What it does |
 | --- | --- |
-| **Find repositories on this PC** | Pick a folder (Desktop, Documents, a projects folder…) and EasyGit searches inside it for repositories, then lets you choose which to add. It never scans your whole drive. |
+| **Auto-find Git repositories** | Searches the usual places on your computer for Git projects, with three choices: **Quick scan** (your usual project/code folders), **Deeper scan** (also Desktop, Documents and Downloads), or **Choose a folder…** (search inside one folder you pick). It shows live progress, can be stopped at any time, and lets you review and pick which projects to add. It never blindly scans your whole drive. |
 | **Add repository folder** | Pick one folder yourself. EasyGit checks it really is a repository before adding it. |
 | **Check if everything is updated** | Checks every repository in the background, refreshing online information, and shows a summary. The window stays responsive while it works. |
 
