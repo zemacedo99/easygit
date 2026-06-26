@@ -321,6 +321,9 @@ async function checkStatus(id, options = {}) {
     localChangeCount: working.length + staged.length + conflicted.length,
     workingCount: working.length,
     stagedCount: staged.length,
+    // Unique changed files (a file changed on both sides counts once) – used for
+    // the simple-mode banner so it agrees with the de-duplicated file list.
+    uniqueLocalCount: new Set([...working, ...staged].map((f) => f.path)).size,
     conflictedCount: conflicted.length,
     untrackedCount: working.filter((f) => f.type === 'untracked').length,
     ahead: ab.ahead,
@@ -348,6 +351,10 @@ async function checkStatus(id, options = {}) {
   // Local branches (for the version-line selector). Best-effort.
   const branches = await git.listBranches(repo.path);
 
+  // Files changed online since the local version (for the simple "Online
+  // project" area). Uses already-fetched info, so reflects the last check.
+  const onlineFiles = ab.hasUpstream ? await git.getOnlineChanges(repo.path) : [];
+
   return {
     ok: true,
     repo: decorate(repo),
@@ -356,6 +363,7 @@ async function checkStatus(id, options = {}) {
       branch,
       branches,
       upstream,
+      onlineFiles,
       hasRemote: facts.hasRemote,
       remoteUrl: repo.remoteUrl,
       provider: urls.providerName(repo.remoteUrl),
@@ -448,6 +456,73 @@ async function commitStaged(id, message) {
   return { ok: true, message: 'Your version was saved on this computer.' };
 }
 
+/**
+ * Simple-mode "Upload my changes": the full safe flow in one step.
+ *  - Conflicts -> stop (never auto-resolve).
+ *  - No online project -> friendly error.
+ *  - Local file changes -> save them (add -A + commit <message>) then upload.
+ *  - No file changes but saved versions waiting -> just upload.
+ *  - Nothing to upload -> "already uploaded".
+ *
+ * @param {string} id
+ * @param {string} [message]  required only when there are local file changes
+ */
+async function uploadChanges(id, message) {
+  const repo = findById(id);
+  if (!repo) return notFound();
+
+  const detailed = await git.getDetailedStatus(repo.path);
+  if (detailed.ok && detailed.conflicted.length > 0) {
+    return {
+      ok: false,
+      error: {
+        title: 'Some files need attention',
+        detail: 'Some files need attention before EasyGit can safely upload. Ask someone technical to help with this project.',
+      },
+    };
+  }
+
+  const remoteUrl = await git.getRemoteUrl(repo.path);
+  if (!remoteUrl) {
+    return { ok: false, error: { title: 'No online project', detail: 'This project is not connected to an online project yet.' } };
+  }
+
+  const hasFileChanges = detailed.ok && detailed.working.length + detailed.staged.length > 0;
+  const upstream = await git.getUpstreamName(repo.path); // null when not linked online yet
+
+  if (hasFileChanges) {
+    if (!message || !message.trim()) {
+      return { ok: false, error: { title: 'A short description is needed', detail: 'Please describe what you changed.' } };
+    }
+    // Save the changes (select all safe changes, then save a version).
+    const staged = await stageAll(id); // conflict-safe (no conflicts here anyway)
+    if (!staged.ok) return staged;
+    const commit = await git.commitStaged(repo.path, message.trim());
+    if (!commit.ok) return { ok: false, error: friendlyError(commit.errorCode, commit.stderr) };
+  } else if (upstream) {
+    // Linked online: we can tell when there is genuinely nothing to upload.
+    const ab = await git.getAheadBehind(repo.path);
+    if (ab.ahead === 0) {
+      return { ok: true, noop: true, message: 'Everything is already uploaded.' };
+    }
+  }
+  // If there is no online link yet, there are local versions never uploaded —
+  // fall through and upload them (setting the link on first upload).
+
+  // Upload (push). Set the online link on the first upload of a new line.
+  const branch = await git.getCurrentBranch(repo.path);
+  const res = upstream || !branch
+    ? await git.push(repo.path)
+    : await git.pushSetUpstream(repo.path, branch);
+  if (!res.ok) return { ok: false, error: friendlyError(res.errorCode, res.stderr) };
+  return {
+    ok: true,
+    message: hasFileChanges
+      ? 'Your changes were saved and uploaded online.'
+      : 'Your saved changes were uploaded online.',
+  };
+}
+
 /** Switch to another existing local version line (branch). Never creates/deletes. */
 async function switchBranch(id, name) {
   const repo = findById(id);
@@ -461,6 +536,21 @@ async function switchBranch(id, name) {
 function getRepoPath(id) {
   const repo = findById(id);
   return repo ? repo.path : null;
+}
+
+/** Default user preferences, merged with any saved values. */
+const DEFAULT_SETTINGS = { showAdvanced: false, showBranch: false };
+
+/** Load user preferences (simple/advanced mode, branch details). */
+function getSettings() {
+  return { ...DEFAULT_SETTINGS, ...storage.loadSettings() };
+}
+
+/** Persist user preferences and return the merged result. */
+function setSettings(partial) {
+  const merged = { ...getSettings(), ...(partial || {}) };
+  storage.saveSettings(merged);
+  return merged;
 }
 
 function notFound() {
@@ -563,10 +653,13 @@ module.exports = {
   stageAll,
   unstageFiles,
   commitStaged,
+  uploadChanges,
   switchBranch,
   download,
   upload,
   hasUnsavedChanges,
   getRepoPath,
+  getSettings,
+  setSettings,
   getStoragePath: storage.getStoragePath,
 };

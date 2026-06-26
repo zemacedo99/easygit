@@ -45,15 +45,16 @@ function ensureInitialized() {
 function readAll() {
   ensureInitialized();
   try {
-    if (!fs.existsSync(storageFilePath)) return { repositories: [], scanRoots: [] };
+    if (!fs.existsSync(storageFilePath)) return { repositories: [], scanRoots: [], settings: {} };
     const data = JSON.parse(fs.readFileSync(storageFilePath, 'utf8'));
     return {
       repositories: Array.isArray(data.repositories) ? data.repositories : [],
       scanRoots: Array.isArray(data.scanRoots) ? data.scanRoots : [],
+      settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
     };
   } catch (e) {
     // Corrupted file – start clean rather than blocking the user.
-    return { repositories: [], scanRoots: [] };
+    return { repositories: [], scanRoots: [], settings: {} };
   }
 }
 
@@ -65,6 +66,7 @@ function writeAll(data) {
     savedAt: new Date().toISOString(),
     repositories: data.repositories || [],
     scanRoots: data.scanRoots || [],
+    settings: data.settings || {},
   };
   const tmp = storageFilePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
@@ -107,9 +109,36 @@ function saveScanRoots(scanRoots) {
   writeAll(all);
 }
 
+/**
+ * Load user preferences (e.g. simple/advanced mode). Returns {} if unset.
+ * @returns {object}
+ */
+function loadSettings() {
+  return readAll().settings;
+}
+
+/**
+ * Persist user preferences, preserving the repository list and scan roots.
+ * @param {object} settings
+ */
+function saveSettings(settings) {
+  const all = readAll();
+  all.settings = settings;
+  writeAll(all);
+}
+
 /** Where the data file lives (handy for the UI / debugging). */
 function getStoragePath() {
   return storageFilePath;
 }
 
-module.exports = { init, loadRepos, saveRepos, loadScanRoots, saveScanRoots, getStoragePath };
+module.exports = {
+  init,
+  loadRepos,
+  saveRepos,
+  loadScanRoots,
+  saveScanRoots,
+  loadSettings,
+  saveSettings,
+  getStoragePath,
+};

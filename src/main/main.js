@@ -169,7 +169,12 @@ function registerIpcHandlers() {
   ipcMain.handle('repos:stageAll', async (_e, id) => repoManager.stageAll(id));
   ipcMain.handle('repos:unstage', async (_e, id, paths) => repoManager.unstageFiles(id, paths));
   ipcMain.handle('repos:commitStaged', async (_e, id, message) => repoManager.commitStaged(id, message));
+  ipcMain.handle('repos:uploadChanges', async (_e, id, message) => repoManager.uploadChanges(id, message));
   ipcMain.handle('repos:switchBranch', async (_e, id, name) => repoManager.switchBranch(id, name));
+
+  // --- Settings (simple/advanced mode, branch details) ---------------------
+  ipcMain.handle('settings:get', async () => repoManager.getSettings());
+  ipcMain.handle('settings:set', async (_e, partial) => repoManager.setSettings(partial));
 
   // Reveal a specific file in the system file explorer.
   ipcMain.handle('repos:revealFile', async (_e, id, relPath) => {

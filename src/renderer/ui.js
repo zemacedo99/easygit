@@ -8,7 +8,15 @@
  * innerHTML) so repository names/paths from disk can never inject markup.
  */
 
-import { formatLastChecked, changeTypeInfo, splitPath } from './labels.js';
+import {
+  formatLastChecked,
+  changeTypeInfo,
+  splitPath,
+  onlineChangeLabel,
+  localGroupKey,
+  LOCAL_GROUP_TITLES,
+  LOCAL_GROUP_ORDER,
+} from './labels.js';
 
 /* ------------------------------------------------------------------ */
 /* Tiny DOM helper                                                     */
@@ -180,9 +188,10 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
  *   onUpload, onDownload, onSwitchBranch, onReveal, onOpenFolder, onOpenRemote,
  *   onRename, onRemove
  */
-export function renderDetails(repo, details, handlers) {
+export function renderDetails(repo, details, handlers, settings) {
   const detailsEmpty = document.getElementById('details-empty');
   const detailsEl = document.getElementById('details');
+  const opts = settings || { showAdvanced: false, showBranch: false };
 
   if (!repo) {
     detailsEmpty.hidden = false;
@@ -195,22 +204,28 @@ export function renderDetails(repo, details, handlers) {
   detailsEl.hidden = false;
   detailsEl.textContent = '';
 
-  // Header: name + path + status badge.
+  // Header: name + path + status badge + settings gear.
   detailsEl.appendChild(
     h('div', { className: 'details-header' }, [
       h('div', { className: 'details-title' }, [
         h('h2', { text: repo.name }),
         h('p', { className: 'repo-path', text: repo.path }),
       ]),
-      statusBadge(repo.statusTone, repo.statusLabel),
+      h('div', { className: 'details-header-right' }, [
+        statusBadge(repo.statusTone, repo.statusLabel),
+        h('button', { className: 'icon-btn settings-gear', title: 'Settings', onClick: () => handlers.onSettings() }, '⚙'),
+      ]),
     ])
   );
 
-  // A) Status banner – the colored, plain-language explanation.
+  // A) Status banner – the colored, plain-language explanation. Simple mode uses
+  // the plain "computer vs online" wording; advanced shows the detailed version.
   const tone = details ? details.tone || repo.statusTone : repo.statusTone;
-  const explanationText = details
+  const explanationText = !details
+    ? repo.statusShort || 'This repository has not been checked yet. Use “Check changes” to see its current state.'
+    : opts.showAdvanced
     ? details.explanation
-    : repo.statusShort || 'This repository has not been checked yet. Use “Check changes” to see its current state.';
+    : details.simpleExplanation || details.explanation;
   detailsEl.appendChild(h('div', { className: `explanation tone-${tone || 'neutral'}`, text: explanationText }));
 
   // Not checked yet: offer a gentle first action and stop here.
@@ -218,7 +233,7 @@ export function renderDetails(repo, details, handlers) {
     detailsEl.appendChild(
       h('div', { className: 'utility-row' }, [
         actionButton('🔎', 'Check changes', () => handlers.onCheck(false), true),
-        actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
+        actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
       ])
     );
     return;
@@ -230,25 +245,30 @@ export function renderDetails(repo, details, handlers) {
     detailsEl.appendChild(
       h('div', { className: 'utility-row' }, [
         actionButton('🔄', 'Check again', () => handlers.onCheck(true), true),
-        actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
+        actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
         dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
       ])
     );
     return;
   }
 
-  // Current version line (branch) card.
-  detailsEl.appendChild(renderVersionLineCard(details, handlers));
+  // Current version line (branch) card – only when the branch setting is on.
+  if (opts.showBranch) {
+    detailsEl.appendChild(renderVersionLineCard(details, handlers));
+  }
 
-  // B) The visual project flow: This computer -> Ready to save -> Saved -> Online.
-  detailsEl.appendChild(renderFlow(repo, details, handlers));
+  // B) The project flow. Simple mode by default (two areas); advanced mode shows
+  // the detailed four-area save/upload flow.
+  detailsEl.appendChild(
+    opts.showAdvanced ? renderFlow(repo, details, handlers) : renderSimpleFlow(repo, details, handlers)
+  );
 
   // Utility actions (always available and safe).
   detailsEl.appendChild(
     h('div', { className: 'utility-row' }, [
       actionButton('🔄', 'Check again', () => handlers.onCheck(true)),
-      actionButton('📂', 'Open folder', () => handlers.onOpenFolder()),
-      details.browserUrl ? actionButton('🔗', 'Open online repository', () => handlers.onOpenRemote()) : null,
+      actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
+      details.browserUrl ? actionButton('🔗', 'Open online project', () => handlers.onOpenRemote()) : null,
       actionButton('✏️', 'Rename', () => handlers.onRename()),
       dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
     ])
@@ -601,6 +621,174 @@ function renderFlow(repo, details, handlers) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Simple mode – two big areas (On this computer  ⇄  Online project)   */
+/* ------------------------------------------------------------------ */
+
+/** Merge staged + working + conflicted into one simple per-file list. */
+function mergeLocalChanges(details) {
+  const map = new Map();
+  (details.working || []).forEach((f) => map.set(f.path, f.type));
+  (details.staged || []).forEach((f) => { if (!map.has(f.path)) map.set(f.path, f.type); });
+  (details.conflicted || []).forEach((f) => map.set(f.path, 'conflicted'));
+  return [...map].map(([path, type]) => ({ path, type }));
+}
+
+/** A read-only, draggable file row for simple mode. */
+function simpleFileRow(f, dragKind, handlers) {
+  const info = changeTypeInfo(f.type);
+  const { name, dir } = splitPath(f.path);
+  const row = h('li', { className: 'file-row', draggable: 'true' }, [
+    h('span', { className: `ct-badge ${info.cls}`, title: info.label, text: info.icon }),
+    h('div', { className: 'file-meta' }, [
+      h('div', { className: 'file-name', text: name }),
+      dir ? h('div', { className: 'file-dir', text: dir }) : null,
+    ]),
+    h('span', { className: 'file-type', text: info.label }),
+    h('button', {
+      className: 'icon-btn',
+      title: 'Show this file in the folder',
+      onClick: (e) => { e.stopPropagation(); handlers.onReveal(f.path); },
+    }, '📂'),
+  ]);
+  row.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ kind: dragKind }));
+    e.dataTransfer.setData(markerType(dragKind), '');
+    e.dataTransfer.effectAllowed = 'move';
+    row.classList.add('dragging');
+  });
+  row.addEventListener('dragend', () => row.classList.remove('dragging'));
+  return row;
+}
+
+/** Local changes grouped by friendly type (New / Edited / Deleted / …). */
+function simpleLocalList(localFiles, handlers) {
+  const groups = {};
+  for (const f of localFiles) {
+    const key = localGroupKey(f.type);
+    (groups[key] = groups[key] || []).push(f);
+  }
+  const sections = [];
+  for (const key of LOCAL_GROUP_ORDER) {
+    const items = groups[key];
+    if (!items || !items.length) continue;
+    sections.push(
+      h('div', { className: 'simple-group' + (key === 'attention' ? ' attention' : '') }, [
+        h('div', { className: 'group-title', text: LOCAL_GROUP_TITLES[key] }),
+        h('ul', { className: 'file-list' }, items.map((f) => simpleFileRow(f, 'local-file', handlers))),
+      ])
+    );
+  }
+  return sections;
+}
+
+/** The simple "Online project" status body. */
+function simpleOnlineBody(details) {
+  if (!details.hasRemote) {
+    return emptyNode('This project is not connected to an online project yet.');
+  }
+  const rows = [];
+  const row = (k, v, cls) => h('div', { className: 'online-row' }, [
+    h('span', { className: 'online-key', text: k }),
+    h('span', { className: 'online-val ' + (cls || ''), text: v }),
+  ]);
+  rows.push(row('Connected to', details.provider || 'an online project', 'val-good'));
+  if (details.browserUrl || details.remoteUrl) rows.push(row('Address', details.browserUrl || details.remoteUrl));
+  rows.push(row('Last checked', formatLastChecked(details.lastChecked)));
+
+  const children = [h('div', { className: 'online-card' }, rows)];
+
+  if (details.behind > 0) {
+    children.push(
+      h('div', { className: 'online-newer' }, [
+        h('strong', { text: `${details.behind} newer change${details.behind === 1 ? '' : 's'} available online.` }),
+      ])
+    );
+    const files = details.onlineFiles || [];
+    if (files.length) {
+      children.push(
+        h('ul', { className: 'file-list online-files' }, files.slice(0, 50).map((f) => {
+          const info = changeTypeInfo(f.type);
+          const { name, dir } = splitPath(f.path);
+          return h('li', { className: 'file-row online-file' }, [
+            h('span', { className: `ct-badge ${info.cls}`, title: onlineChangeLabel(f.type), text: info.icon }),
+            h('div', { className: 'file-meta' }, [
+              h('div', { className: 'file-name', text: name }),
+              dir ? h('div', { className: 'file-dir', text: dir }) : null,
+            ]),
+            h('span', { className: 'file-type', text: onlineChangeLabel(f.type) }),
+          ]);
+        }))
+      );
+    }
+  } else {
+    children.push(h('div', { className: 'online-uptodate', text: 'You have the latest version.' }));
+  }
+
+  if (details.fetchError) {
+    children.push(h('div', { className: 'online-warn' }, [h('strong', { text: details.fetchError.title + '. ' }), details.fetchError.detail]));
+  }
+  return h('div', {}, children);
+}
+
+/** The two-area simple flow with drag-and-drop (local ⇄ online). */
+function renderSimpleFlow(repo, details, handlers) {
+  const localFiles = mergeLocalChanges(details);
+  const hasConflicts = (details.conflicted || []).length > 0;
+
+  /* On this computer */
+  const localBody = [];
+  if (localFiles.length) localBody.push(...simpleLocalList(localFiles, handlers));
+  // Always surface saved-but-not-uploaded versions, even alongside file changes.
+  if (details.ahead > 0) {
+    localBody.push(h('div', { className: 'area-note', text: `${details.ahead} change${details.ahead === 1 ? '' : 's'} saved here, waiting to upload.` }));
+  }
+  if (!localFiles.length && !(details.ahead > 0)) localBody.push(emptyNode('No changes on this computer.'));
+
+  const uploadBtn = actionButton('⬆️', 'Upload my changes', () => handlers.onUploadChanges(), true);
+  const localArea = buildArea({
+    key: 'computer',
+    icon: '💻',
+    title: 'On this computer',
+    subtitle: 'Your project folder and your changes.',
+    // Badge counts the changed files (matches the list); waiting versions are
+    // shown as a note in the body.
+    count: localFiles.length > 0 ? localFiles.length : null,
+    dim: localFiles.length === 0 && !(details.ahead > 0),
+    body: h('div', {}, localBody),
+    actions: [uploadBtn],
+    handle: hasConflicts ? null : dragHandle('local-area', 'Drag onto “Online project” to upload your changes'),
+  });
+  // Dropping the online area here means: download the latest version.
+  makeDropZone(localArea, ['online-area'], () => handlers.onDownload());
+
+  /* Online project */
+  const onlineActions = [];
+  if (details.hasRemote) {
+    onlineActions.push(actionButton('🌐', 'Check online project', () => handlers.onCheck(true)));
+    if (details.behind > 0) {
+      onlineActions.push(actionButton('⬇️', 'Download latest version', () => handlers.onDownload(), true));
+    }
+  }
+  const onlineArea = buildArea({
+    key: 'online',
+    icon: '☁️',
+    title: 'Online project',
+    subtitle: 'The shared online version of the project.',
+    // Badge only when there is something to download (avoids a bare "0").
+    count: details.hasRemote && details.behind > 0 ? details.behind : null,
+    countTone: details.behind > 0 ? 'tone-download' : '',
+    dim: !details.hasRemote,
+    body: simpleOnlineBody(details),
+    actions: onlineActions,
+    handle: details.hasRemote ? dragHandle('online-area', 'Drag onto “On this computer” to download the latest version') : null,
+  });
+  // Dropping local files / the local area here means: upload my changes.
+  makeDropZone(onlineArea, ['local-area', 'local-file'], () => handlers.onUploadChanges());
+
+  return h('div', { className: 'flow flow-simple' }, [localArea, h('div', { className: 'flow-arrow flow-arrow-2way', text: '⇄' }), onlineArea]);
+}
+
+/* ------------------------------------------------------------------ */
 /* Specialised modals                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -638,6 +826,47 @@ export function showSaveVersionModal(onSave) {
           },
         },
         'Save version'
+      ),
+    ],
+  });
+
+  setTimeout(() => textarea.focus(), 50);
+}
+
+/**
+ * Simple-mode "Upload my changes": ask for a description, then call onUpload.
+ * @param {(message: string) => void} onUpload
+ */
+export function showUploadMessageModal(onUpload) {
+  const textarea = h('textarea', {
+    className: 'input',
+    placeholder: 'For example: Updated the homepage text',
+  });
+
+  const close = openModal({
+    title: 'Upload my changes',
+    subtitle: 'EasyGit will save these changes on your computer and upload them online.',
+    body: h('div', { className: 'field' }, [
+      h('label', { text: 'Describe what you changed' }),
+      textarea,
+    ]),
+    footer: [
+      h('button', { className: 'btn', onClick: () => close() }, 'Cancel'),
+      h(
+        'button',
+        {
+          className: 'btn btn-primary',
+          onClick: () => {
+            const msg = textarea.value.trim();
+            if (!msg) {
+              textarea.focus();
+              return;
+            }
+            close();
+            onUpload(msg);
+          },
+        },
+        'Save and upload'
       ),
     ],
   });
@@ -926,6 +1155,42 @@ export function openModalSimple(title, message) {
     title,
     body: h('p', { className: 'muted', text: message }),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'OK')],
+  });
+}
+
+/**
+ * Settings dialog: simple/advanced mode + branch details. Calls onChange with
+ * the updated settings whenever a toggle changes (so it applies live).
+ * @param {{showAdvanced:boolean, showBranch:boolean}} settings
+ * @param {(settings: object) => void} onChange
+ */
+export function showSettingsModal(settings, onChange) {
+  const current = { ...settings };
+
+  const toggle = (key, title, desc) => {
+    const cb = h('input', { type: 'checkbox', className: 'file-check' });
+    if (current[key]) cb.checked = true;
+    cb.addEventListener('change', () => {
+      current[key] = cb.checked;
+      onChange({ ...current });
+    });
+    return h('label', { className: 'setting-row' }, [
+      cb,
+      h('div', {}, [
+        h('div', { className: 'setting-title', text: title }),
+        h('div', { className: 'setting-desc', text: desc }),
+      ]),
+    ]);
+  };
+
+  const close = openModal({
+    title: 'Settings',
+    subtitle: 'These preferences are remembered between launches.',
+    body: h('div', { className: 'settings-list' }, [
+      toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
+      toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
+    ]),
+    footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });
 }
 

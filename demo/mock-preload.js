@@ -125,6 +125,16 @@ const BRANCHES = {
   r2: ['main', 'feature/login', 'bugfix/crash'],
 };
 
+// Files changed online (for the simple "Online project" area), shown when behind.
+const ONLINE_FILES = {
+  r1: [
+    { path: 'index.html', type: 'modified' },
+    { path: 'styles/site.css', type: 'modified' },
+    { path: 'about.html', type: 'added' },
+  ],
+  r2: [{ path: 'src/api/client.js', type: 'modified' }],
+};
+
 const HISTORY = {
   r2: [
     { hash: 'a1b2c3d', when: '2 hours ago', author: 'You', subject: 'Fix login button alignment' },
@@ -185,6 +195,7 @@ function buildDetails(repo) {
     ...interpreted,
     branch: repo.branch,
     branches: BRANCHES[repo.id] || [repo.branch],
+    onlineFiles: ONLINE_FILES[repo.id] || [],
     upstream: facts.hasUpstream ? `origin/${repo.branch}` : null,
     hasRemote: facts.hasRemote,
     remoteUrl: repo.remoteUrl,
@@ -212,6 +223,7 @@ function buildDetails(repo) {
 
 let repos = fs.existsSync(SEED_FLAG) ? buildSamples() : [];
 let addMode = 'valid';
+let settings = { showAdvanced: false, showBranch: false };
 const progressListeners = [];
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -357,6 +369,26 @@ window.easygit = {
   },
   revealFile: async () => ({ ok: true }),
 
+  uploadChanges: async (id, message) => {
+    const m = getMut(id);
+    if (m.conflicted.length) {
+      return { ok: false, error: { title: 'Some files need attention', detail: 'Some files need attention before EasyGit can safely upload. Ask someone technical to help with this project.' } };
+    }
+    const hasFileChanges = m.working.length + m.staged.length > 0;
+    if (hasFileChanges) {
+      m.working = [];
+      m.staged = [];
+      return { ok: true, message: 'Your changes were saved and uploaded online.' };
+    }
+    return { ok: true, message: 'Your saved changes were uploaded online.' };
+  },
+
+  getSettings: async () => ({ ...settings }),
+  setSettings: async (partial) => {
+    settings = { ...settings, ...partial };
+    return { ...settings };
+  },
+
   pickFolder: async (title) => {
     if (title && title.toLowerCase().includes('scan')) return 'C:\\Users\\alex\\Dev';
     return addMode === 'invalid'
@@ -426,5 +458,14 @@ window.__demo = {
   closeModal: () => {
     const o = document.querySelector('.modal-overlay');
     if (o) o.remove();
+  },
+  clickSettingByText: (text) => {
+    const row = [...document.querySelectorAll('.setting-row')].find((r) => r.textContent.includes(text));
+    if (row) {
+      const cb = row.querySelector('input');
+      if (cb) cb.click();
+      return true;
+    }
+    return false;
   },
 };

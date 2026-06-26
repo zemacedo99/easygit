@@ -878,3 +878,45 @@ textarea.input {
 
 /* Utility actions row */
 .utility-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* =========================================================================
+   Simple mode – two big areas (On this computer  ⇄  Online project)
+   ========================================================================= */
+.flow-simple { flex-direction: row; align-items: stretch; }
+.flow-simple > .flow-area { flex: 1 1 0; min-width: 0; }
+.flow-arrow-2way { transform: none; font-size: 28px; padding: 0 8px; align-self: center; }
+@media (max-width: 760px) {
+  .flow-simple { flex-direction: column; }
+  .flow-simple .flow-arrow-2way { transform: rotate(90deg); }
+}
+
+.simple-group { margin-top: 12px; }
+.simple-group:first-child { margin-top: 8px; }
+.simple-group.attention .group-title { color: var(--tone-error); }
+.area-note {
+  margin-top: 10px; font-size: 13px; color: var(--text-dim);
+  background: rgba(56, 189, 248, 0.10); border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px; padding: 8px 10px;
+}
+
+/* Online project (simple) */
+.online-val.val-good { color: var(--tone-good); font-weight: 600; }
+.online-newer {
+  margin-top: 10px; color: var(--tone-download);
+  background: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 8px; padding: 8px 10px; font-size: 13.5px;
+}
+.online-uptodate { margin-top: 10px; color: var(--tone-good); font-size: 13.5px; }
+.online-files { margin-top: 8px; }
+.online-file { cursor: default; }
+
+/* Details header right cluster + settings gear */
+.details-header-right { display: flex; align-items: center; gap: 10px; }
+.settings-gear { font-size: 18px; }
+
+/* Settings dialog */
+.settings-list { display: flex; flex-direction: column; gap: 14px; }
+.setting-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.setting-row .file-check { margin-top: 2px; }
+.setting-title { font-weight: 600; font-size: 14px; }
+.setting-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }

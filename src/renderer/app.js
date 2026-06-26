@@ -18,6 +18,7 @@ const state = {
   selectedId: null,     // currently selected repo id
   details: {},          // id -> last status-check result details
   checking: new Set(),  // ids currently being checked (for the spinner badge)
+  settings: { showAdvanced: false, showBranch: false }, // persisted preferences
 };
 
 /* ------------------------------------------------------------------ */
@@ -31,6 +32,13 @@ async function init() {
     document.getElementById('git-warning').hidden = !!git.installed;
   } catch (e) {
     /* ignore – non-fatal */
+  }
+
+  // Load persisted preferences (simple/advanced mode, branch details).
+  try {
+    state.settings = await api.getSettings();
+  } catch (e) {
+    /* ignore – keep defaults */
   }
 
   subscribeProgress();
@@ -47,7 +55,7 @@ async function refreshRepos() {
 function rerender() {
   ui.renderRepoList(state.repos, state.selectedId, selectRepo, state.checking);
   const repo = currentRepo();
-  ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers());
+  ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers(), state.settings);
 }
 
 function currentRepo() {
@@ -208,6 +216,10 @@ function showGlobalSummary() {
 function detailHandlers() {
   return {
     onCheck: (fetch) => { const r = currentRepo(); if (r) checkRepo(r.id, !!fetch); },
+    onSettings: () => openSettings(),
+
+    // Simple mode: one-click "Upload my changes" (save + upload as needed)
+    onUploadChanges: () => uploadChanges(),
 
     // Selection / staging
     onStage: (paths) => mutate((id) => api.stage(id, paths)),
@@ -328,7 +340,64 @@ function switchVersionLine(name) {
   }
 }
 
-/** Download, with a friendly warning first if there are unsaved local changes. */
+/** Open the settings dialog; changes apply live and are persisted. */
+function openSettings() {
+  ui.showSettingsModal(state.settings, async (newSettings) => {
+    state.settings = await api.setSettings(newSettings);
+    rerender();
+  });
+}
+
+/**
+ * Simple-mode "Upload my changes": asks for a description only when there are
+ * local file changes, then runs the combined save + upload via the main process.
+ */
+function uploadChanges() {
+  const repo = currentRepo();
+  if (!repo) return;
+  const details = state.details[repo.id];
+  const counts = (details && details.counts) || { working: 0, staged: 0, conflicted: 0 };
+
+  if (counts.conflicted > 0) {
+    ui.showToast({
+      type: 'warn',
+      title: 'Some files need attention',
+      body: 'Some files need attention before EasyGit can safely upload. Ask someone technical to help with this project.',
+    });
+    return;
+  }
+
+  const hasFileChanges = counts.working + counts.staged > 0;
+  const runUpload = async (message) => {
+    const res = await api.uploadChanges(repo.id, message);
+    if (!res.ok) {
+      // Changes may have appeared on disk since the last check: if the main
+      // process now needs a description, ask for it and retry instead of erroring.
+      if (res.error && /description/i.test(res.error.title)) {
+        ui.showUploadMessageModal(runUpload);
+        return;
+      }
+      ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
+    } else if (res.noop) {
+      ui.showToast({ type: 'info', title: 'Already uploaded', body: res.message });
+    } else {
+      ui.showToast({ type: 'success', title: 'Uploaded', body: res.message });
+    }
+    await checkRepo(repo.id, false);
+  };
+
+  if (hasFileChanges) {
+    ui.showUploadMessageModal((message) => {
+      ui.showToast({ type: 'info', title: 'Saving and uploading your changes…' });
+      runUpload(message);
+    });
+  } else {
+    ui.showToast({ type: 'info', title: 'Uploading your saved changes…' });
+    runUpload(null); // only saved versions waiting (or nothing) – no description needed
+  }
+}
+
+/** Download, with a friendly warning first if there are local changes. */
 async function handleDownload(repo) {
   const unsaved = await api.hasUnsaved(repo.id);
   const doDownload = () => runAction(repo, () => api.download(repo.id), 'Downloading the latest version…');
@@ -336,9 +405,9 @@ async function handleDownload(repo) {
   if (unsaved) {
     ui.showConfirm(
       {
-        title: 'You have unsaved local changes',
+        title: 'You have changes on this computer',
         message:
-          'You have local changes that are not saved yet. It is safer to save a version first, otherwise you may need help resolving conflicts. Do you want to download anyway?',
+          'You have changes on this computer. Downloading may require help if the same files were changed online. EasyGit will not delete your changes automatically. Download anyway?',
         confirmLabel: 'Download anyway',
       },
       doDownload

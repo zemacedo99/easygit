@@ -413,6 +413,34 @@ async function listBranches(repoPath) {
   return res.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * Files that changed ONLINE since the local version, using already-fetched info
+ * (no network): git diff --name-status HEAD..@{u}. Returns [] when there is no
+ * upstream to compare against.
+ * @returns {Promise<Array<{path: string, type: string}>>}
+ */
+async function getOnlineChanges(repoPath) {
+  const res = await runGit(repoPath, ['diff', '--name-status', '-z', 'HEAD..@{u}']);
+  if (!res.ok) return [];
+
+  const tokens = res.stdout.split('\0').filter((t) => t.length > 0);
+  const out = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const status = tokens[i++];
+    const code = status[0];
+    if (code === 'R' || code === 'C') {
+      i++; // skip the old path
+      const newPath = tokens[i++];
+      if (newPath) out.push({ path: newPath, type: code === 'R' ? 'renamed' : 'copied' });
+    } else {
+      const p = tokens[i++];
+      if (p) out.push({ path: p, type: mapStatusCode(code) });
+    }
+  }
+  return out;
+}
+
 // --- Staging / selection commands (always from an explicit user action) ------
 
 /** Move specific files into "ready to save" (stage). Handles deletes too. */
@@ -477,6 +505,15 @@ async function push(repoPath) {
   return { ok: res.ok, errorCode: res.errorCode, stdout: res.stdout, stderr: res.stderr };
 }
 
+/**
+ * First upload of a branch that isn't linked online yet: push and set the
+ * online link (git push -u origin <branch>). Non-destructive.
+ */
+async function pushSetUpstream(repoPath, branch) {
+  const res = await runGit(repoPath, ['push', '-u', 'origin', branch], { timeout: NETWORK_TIMEOUT_MS });
+  return { ok: res.ok, errorCode: res.errorCode, stdout: res.stdout, stderr: res.stderr };
+}
+
 module.exports = {
   GitErrorCode,
   runGit,
@@ -491,6 +528,7 @@ module.exports = {
   getUpstreamName,
   getUnpushedHashes,
   listBranches,
+  getOnlineChanges,
   fetch,
   getRecentHistory,
   commitAll,
@@ -501,6 +539,7 @@ module.exports = {
   switchBranch,
   pull,
   push,
+  pushSetUpstream,
   // exposed for callers that want to name a folder
   basename: (p) => path.basename(p),
 };

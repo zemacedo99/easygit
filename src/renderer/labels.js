@@ -51,6 +51,36 @@ export function changeTypeInfo(type) {
   return CHANGE_TYPES[type] || { label: 'Changed', icon: '•', cls: 'ct-modified' };
 }
 
+/** Friendly label for a file that changed ONLINE (simple mode). */
+export function onlineChangeLabel(type) {
+  const map = {
+    added: 'Added online',
+    modified: 'Edited online',
+    deleted: 'Deleted online',
+    renamed: 'Renamed online',
+    copied: 'Copied online',
+    typechange: 'Changed online',
+  };
+  return map[type] || 'Changed online';
+}
+
+/* Simple-mode grouping of local changes (no staged/unstaged distinction). */
+export function localGroupKey(type) {
+  if (type === 'untracked' || type === 'added') return 'new';
+  if (type === 'deleted') return 'deleted';
+  if (type === 'renamed' || type === 'copied') return 'renamed';
+  if (type === 'conflicted') return 'attention';
+  return 'edited';
+}
+export const LOCAL_GROUP_TITLES = {
+  attention: 'Files needing attention',
+  new: 'New files',
+  edited: 'Edited files',
+  deleted: 'Deleted files',
+  renamed: 'Renamed files',
+};
+export const LOCAL_GROUP_ORDER = ['attention', 'new', 'edited', 'deleted', 'renamed'];
+
 /** Split a repo-relative path into { name, dir } for two-line display. */
 export function splitPath(relPath) {
   const norm = String(relPath || '').replace(/\\/g, '/');

@@ -131,6 +131,51 @@ function buildExplanation(status, f) {
 }
 
 /**
+ * Build the SIMPLE-mode banner: only "on this computer" vs "online project",
+ * no staging/commit/branch language.
+ * @param {StatusFacts} f
+ * @returns {string}
+ */
+function buildSimpleExplanation(f) {
+  const working = f.workingCount != null ? num(f.workingCount) : num(f.localChangeCount);
+  const staged = num(f.stagedCount);
+  const conflicted = num(f.conflictedCount);
+  // Count unique changed files so the banner matches the de-duplicated file list
+  // (a file edited on both sides would otherwise be counted twice).
+  const localChanged = f.uniqueLocalCount != null ? num(f.uniqueLocalCount) : working + staged;
+
+  if (conflicted > 0) {
+    return 'Some files need attention before EasyGit can upload safely.';
+  }
+  if (!f.hasRemote) {
+    return localChanged > 0
+      ? `You changed ${pluralize(localChanged, 'file', 'files')} on this computer. This project is not connected to an online project yet.`
+      : 'This project is not connected to an online project yet.';
+  }
+
+  const toUpload = localChanged > 0 || f.ahead > 0;
+  if (toUpload && f.behind > 0) {
+    return 'You have changes here and newer files online. Download first, then upload your work if needed.';
+  }
+  if (f.behind > 0) {
+    return `There ${f.behind === 1 ? 'is' : 'are'} ${pluralize(f.behind, 'newer change', 'newer changes')} online. Download ${
+      f.behind === 1 ? 'it' : 'them'
+    } before continuing.`;
+  }
+  if (localChanged > 0) {
+    return `You changed ${pluralize(localChanged, 'file', 'files')} on this computer. Upload ${
+      localChanged === 1 ? 'it' : 'them'
+    } when you are ready.`;
+  }
+  if (f.ahead > 0) {
+    return `You have ${pluralize(f.ahead, 'change', 'changes')} ready to upload. Upload ${
+      f.ahead === 1 ? 'it' : 'them'
+    } when you are ready.`;
+  }
+  return 'Everything is up to date.';
+}
+
+/**
  * Produce a short online-comparison summary line for the details panel.
  * @param {StatusFacts} f
  * @returns {string}
@@ -179,6 +224,7 @@ function interpret(facts) {
     label: info.label,
     tone: info.tone,
     explanation: buildExplanation(status, facts),
+    simpleExplanation: buildSimpleExplanation(facts),
     onlineSummary: buildOnlineSummary(facts),
     localSummary,
   };
