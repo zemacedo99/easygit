@@ -213,6 +213,18 @@ See [ROADMAP.md](ROADMAP.md) for the planned next steps.
 
 ---
 
+## Credits
+
+Project vision: Inês Caetano  
+Developed by: José Dantas Macedo, with the help of Claude
+
+The EasyGit logo (shown in the app header) lives at
+`src/renderer/assets/logo.svg`. It merges the brand mark (red square
+with the top-right sail cut), the mascot mark (the two nodes as eyes), and
+the Git branch/merge graph.
+
+---
+
 ## License
 
 MIT — see the `license` field in `package.json`.
