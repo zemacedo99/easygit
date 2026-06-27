@@ -91,7 +91,7 @@ async function onAdd() {
   const folder = await api.pickFolder('Choose a repository folder to add');
   if (!folder) return;
 
-  const res = await api.addRepo(folder);
+  const res = await withBusy('Adding repository…', () => api.addRepo(folder));
   if (!res.ok) {
     ui.openModalSimple(res.error.title, res.error.detail);
     return;
@@ -215,7 +215,7 @@ function showGlobalSummary() {
 
 function detailHandlers() {
   return {
-    onCheck: (fetch) => { const r = currentRepo(); if (r) checkRepo(r.id, !!fetch); },
+    onCheck: (fetch) => { const r = currentRepo(); if (r) doCheck(r.id, !!fetch); },
     onSettings: () => openSettings(),
 
     // Simple mode: one-click "Upload my changes" (save + upload as needed)
@@ -231,7 +231,7 @@ function detailHandlers() {
       const repo = currentRepo();
       if (!repo) return;
       ui.showSaveVersionModal(async (message) => {
-        const res = await api.commitStaged(repo.id, message);
+        const res = await withBusy('Saving your version…', () => api.commitStaged(repo.id, message));
         if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
         else ui.showToast({ type: 'success', title: 'Version saved', body: res.message });
         await checkRepo(repo.id, false);
@@ -297,7 +297,7 @@ async function mutate(fn) {
   if (!repo || mutating) return;
   mutating = true;
   try {
-    const res = await fn(repo.id);
+    const res = await withBusy('Updating…', () => fn(repo.id));
     if (res && res.ok === false && res.error) {
       ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
     }
@@ -320,7 +320,7 @@ function switchVersionLine(name) {
   rerender();
 
   const doSwitch = async () => {
-    const res = await api.switchBranch(repo.id, name);
+    const res = await withBusy('Switching version line…', () => api.switchBranch(repo.id, name));
     if (!res.ok) ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
     else ui.showToast({ type: 'success', title: 'Switched version line', body: res.message });
     await checkRepo(repo.id, false);
@@ -369,7 +369,10 @@ function uploadChanges() {
 
   const hasFileChanges = counts.working + counts.staged > 0;
   const runUpload = async (message) => {
-    const res = await api.uploadChanges(repo.id, message);
+    const res = await withBusy(
+      hasFileChanges ? 'Saving and uploading your changes…' : 'Uploading your saved changes…',
+      () => api.uploadChanges(repo.id, message)
+    );
     if (!res.ok) {
       // Changes may have appeared on disk since the last check: if the main
       // process now needs a description, ask for it and retry instead of erroring.
@@ -387,12 +390,8 @@ function uploadChanges() {
   };
 
   if (hasFileChanges) {
-    ui.showUploadMessageModal((message) => {
-      ui.showToast({ type: 'info', title: 'Saving and uploading your changes…' });
-      runUpload(message);
-    });
+    ui.showUploadMessageModal(runUpload); // the busy overlay covers the wait
   } else {
-    ui.showToast({ type: 'info', title: 'Uploading your saved changes…' });
     runUpload(null); // only saved versions waiting (or nothing) – no description needed
   }
 }
@@ -419,8 +418,7 @@ async function handleDownload(repo) {
 
 /** Run an action that returns {ok, message|error}, then refresh the repo. */
 async function runAction(repo, fn, busyText) {
-  ui.showToast({ type: 'info', title: busyText });
-  const res = await fn();
+  const res = await withBusy(busyText, fn);
   if (!res.ok) {
     ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
   } else {
@@ -444,6 +442,32 @@ async function checkRepo(id, fetch) {
     ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
   }
   rerender();
+}
+
+/**
+ * Show a blocking "please wait" overlay while an async operation runs. The
+ * overlay is deferred by a short delay so instant actions never flash it, but
+ * any real wait (uploads, downloads, network checks…) gets clear feedback.
+ * @param {string} message
+ * @param {() => Promise<any>} fn
+ */
+async function withBusy(message, fn, delay = 150) {
+  let shown = false;
+  const timer = setTimeout(() => {
+    ui.showBusy(message);
+    shown = true;
+  }, delay);
+  try {
+    return await fn();
+  } finally {
+    clearTimeout(timer);
+    if (shown) ui.hideBusy();
+  }
+}
+
+/** A status check started from an explicit "Check" button, with wait feedback. */
+function doCheck(id, fetch) {
+  return withBusy(fetch ? 'Checking the online project…' : 'Checking your changes…', () => checkRepo(id, fetch));
 }
 
 /* ------------------------------------------------------------------ */

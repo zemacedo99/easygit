@@ -1158,6 +1158,41 @@ export function openModalSimple(title, message) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Busy / "please wait" overlay                                        */
+/* ------------------------------------------------------------------ */
+
+let busyEl = null;
+
+/**
+ * Show (or update) a blocking "please wait" overlay with a spinner + message.
+ * Safe to call repeatedly – it reuses the single overlay and just updates text.
+ * @param {string} [message]
+ */
+export function showBusy(message) {
+  const text = message || 'Working…';
+  if (busyEl) {
+    const t = busyEl.querySelector('.busy-text');
+    if (t) t.textContent = text;
+    return;
+  }
+  busyEl = h('div', { className: 'busy-overlay' }, [
+    h('div', { className: 'busy-card' }, [
+      h('div', { className: 'busy-spinner' }),
+      h('div', { className: 'busy-text', text }),
+    ]),
+  ]);
+  document.getElementById('modal-root').appendChild(busyEl);
+}
+
+/** Hide the "please wait" overlay (no-op if not shown). */
+export function hideBusy() {
+  if (busyEl) {
+    busyEl.remove();
+    busyEl = null;
+  }
+}
+
 /**
  * Settings dialog: simple/advanced mode + branch details. Calls onChange with
  * the updated settings whenever a toggle changes (so it applies live).
