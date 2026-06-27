@@ -4,9 +4,9 @@
 
 It is a single flat mark that merges three identities:
 
-- **brand** — the red square with the curved "sail" cut at the top-right.
-- **mascot** — the two white nodes that read as the creature's eyes.
-- **Git** — the white branch/merge graph the nodes form.
+- **brand** — the red square with the curved "sail" cut at the top-right (the background).
+- **mascot** — the white circuit-creature in the centre (domed head, two eyes, antennae).
+- **Git** — the creature's legs are drawn as a branch/fork with commit nodes.
 
 It's an SVG, so it scales crisply at any size. To restyle the brand, edit
 `logo.svg` (the red is `#C8102E`; the inner mark is white). To swap it out, keep
