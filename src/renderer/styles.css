@@ -1089,6 +1089,27 @@ textarea.input {
   animation: busy-spin 0.8s linear infinite;
 }
 
+/* Per-action feedback: the clicked button shows an inline spinner while its
+   (long) operation runs. The label is hidden under the spinner; size is kept. */
+.btn.btn-busy {
+  color: transparent !important;
+  position: relative;
+  pointer-events: none;
+}
+.btn.btn-busy::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: busy-spin 0.7s linear infinite;
+}
+
 /* Inline busy bar at the top of the repository details panel */
 .repo-busy {
   display: flex;

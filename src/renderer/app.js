@@ -262,7 +262,9 @@ function showGlobalSummary() {
 
 function detailHandlers() {
   return {
-    onCheck: (fetch) => { const r = currentRepo(); if (r) doCheck(r.id, !!fetch); },
+    // Return the promises so the clicked button can show a spinner while the
+    // (long) action runs. Modal-openers below intentionally return nothing.
+    onCheck: (fetch) => { const r = currentRepo(); if (r) return doCheck(r.id, !!fetch); },
     onSettings: () => openSettings(),
 
     // Simple mode: one-click "Upload my changes" (save + upload as needed)
@@ -290,8 +292,8 @@ function detailHandlers() {
       });
     },
 
-    onUpload: () => { const r = currentRepo(); if (r) runAction(r, () => api.upload(r.id), 'Uploading your saved versions…'); },
-    onDownload: () => { const r = currentRepo(); if (r) handleDownload(r); },
+    onUpload: () => { const r = currentRepo(); if (r) return runAction(r, () => api.upload(r.id), 'Uploading your saved versions…'); },
+    onDownload: () => { const r = currentRepo(); if (r) return handleDownload(r); },
     onSwitchBranch: (name) => switchVersionLine(name),
     onReveal: (relPath) => { const r = currentRepo(); if (r) api.revealFile(r.id, relPath); },
 
@@ -451,7 +453,7 @@ function uploadChanges() {
   if (hasFileChanges) {
     ui.showUploadMessageModal(uploadHandlers);
   } else {
-    runUpload(null); // only saved versions waiting (or nothing) – no description needed
+    return runUpload(null); // only saved versions waiting (or nothing) – no description needed
   }
 }
 
@@ -471,7 +473,7 @@ async function handleDownload(repo) {
       doDownload
     );
   } else {
-    doDownload();
+    return doDownload();
   }
 }
 

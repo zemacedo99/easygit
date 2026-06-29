@@ -344,10 +344,31 @@ export function renderDetails(repo, details, handlers, settings) {
 /* ------------------------------------------------------------------ */
 
 function actionButton(icon, label, onClick, primary) {
-  return h('button', { className: 'btn btn-sm' + (primary ? ' btn-primary' : ''), onClick }, [
+  const btn = h('button', { className: 'btn btn-sm' + (primary ? ' btn-primary' : '') }, [
     h('span', { className: 'btn-icon', text: icon }),
     ' ' + label,
   ]);
+  btn.addEventListener('click', () => runMaybeBusy(btn, onClick));
+  return btn;
+}
+
+/**
+ * Run a button's click handler. If the handler returns a promise (a real,
+ * long-running action), show a spinner on that button and disable it until the
+ * promise settles — clear per-action feedback. Handlers that just open a dialog
+ * return nothing, so the button does not spin.
+ */
+function runMaybeBusy(btn, onClick) {
+  const ret = onClick();
+  if (ret && typeof ret.then === 'function' && !btn.classList.contains('btn-busy')) {
+    btn.classList.add('btn-busy');
+    btn.disabled = true;
+    Promise.resolve(ret).finally(() => {
+      btn.classList.remove('btn-busy');
+      btn.disabled = false;
+    });
+  }
+  return ret;
 }
 
 function dangerButton(icon, label, onClick) {
