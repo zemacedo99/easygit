@@ -1,12 +1,17 @@
 {
   "name": "easygit",
+  "productName": "EasyGit",
   "version": "1.0.0",
-  "description": "A friendly desktop app that makes common Git operations easy for non-technical users by replacing Git jargon with clear, human-friendly actions.",
+  "description": "Manage your projects without learning Git",
   "private": true,
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "make-icons": "electron scripts/make-icons.js",
+    "package": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win"
   },
   "keywords": [
     "git",
@@ -15,9 +20,64 @@
     "beginner",
     "non-technical"
   ],
-  "author": "EasyGit",
+  "author": {
+    "name": "José Dantas Macedo",
+    "email": "56549301+zemacedo99@users.noreply.github.com"
+  },
+  "contributors": [
+    "Inês Caetano (product vision)",
+    "José Dantas Macedo (development, with Claude)"
+  ],
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.zemacedo99.easygit",
+    "productName": "EasyGit",
+    "copyright": "Copyright (c) 2026 José Dantas Macedo",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EasyGit"
+    },
+    "portable": {
+      "artifactName": "EasyGit-${version}-portable.${ext}"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "build/icon.png",
+      "category": "Development"
+    }
   }
 }

@@ -13,9 +13,21 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Build output (for future packaging)
+# Packaged build output (electron-builder writes installers/portables here).
+# Do NOT commit generated installers. Source icons under build/ ARE committed.
 dist/
 out/
+release/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.blockmap
+
+# Temp file produced by scripts/make-icons.js (auto-deleted; ignore stray copies)
+src/renderer/assets/_icon_tmp.html
 
 # Local runtime data (EasyGit stores its repo list in the OS userData folder,
 # not here, but ignore any stray local copies just in case)

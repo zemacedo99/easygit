@@ -41,37 +41,126 @@ not.
 
 ---
 
-## How to install and run
+## Installing EasyGit
 
-### Requirements
+**For everyday users — no Node.js, no commands, no terminal.**
 
-| You need | Why | Where to get it |
+Download the EasyGit installer (or the portable `.exe`) and run it like any other
+desktop app:
+
+1. Get the EasyGit installer or portable app from your team's shared location (or
+   build it yourself — see **Building EasyGit** below).
+2. **Windows:**
+   - *Installer* — `EasyGit Setup <version>.exe`: double-click it, choose where to
+     install, and EasyGit is added to your Start menu (and, if you want, the
+     desktop).
+   - *Portable* — `EasyGit-<version>-portable.exe`: just double-click to run; no
+     installation needed.
+3. Launch EasyGit from the Start menu, the desktop shortcut, or the portable file.
+   You'll see the EasyGit icon in the window and taskbar.
+
+### What you need
+
+| You need | For the packaged app? | Notes |
 | --- | --- | --- |
-| **Git** | EasyGit runs Git for you behind the scenes | https://git-scm.com/downloads |
-| **Node.js** (v18 or newer) | Needed to run the app | https://nodejs.org |
+| **Git** | ✅ **Required** | EasyGit runs Git for you. Get it free from https://git-scm.com/downloads. EasyGit checks for Git at startup and tells you clearly — including where to download it — if it's missing. |
+| **Node.js** | ❌ **Not required** | Node.js is bundled inside the packaged app. You only need it if you build EasyGit from source. |
 
-> EasyGit checks whether Git is installed when it starts and warns you clearly if
-> it isn't.
+> **In short:** the packaged EasyGit app does **not** need Node.js, but it still
+> needs **Git** installed on the computer.
 
-### The easy way
+---
+
+## Building EasyGit
+
+*For developers / maintainers. You need [Node.js](https://nodejs.org) (v18 or
+newer) and Git to build EasyGit.*
+
+### Run from source (no packaging)
+
+The quick scripts install dependencies the first time, then launch the app:
 
 - **Windows:** double-click **`run.cmd`**.
 - **macOS / Linux:** run **`./run.sh`** in a terminal.
 
-These scripts install everything needed the first time, then launch the app.
-
-### The manual way
+Or do it manually:
 
 ```bash
 npm install     # one time only
 npm start       # launches EasyGit
+npm run dev     # same, but with developer tools open
 ```
 
-For development (opens developer tools):
+### Build installable desktop apps
+
+EasyGit is packaged with [electron-builder](https://www.electron.build/), so end
+users don't need Node.js.
 
 ```bash
-npm run dev
+npm install            # one time only
+npm run dist           # build installer(s) for the current OS
+npm run package        # quick UNPACKED build, no installer (fastest to test)
+npm run dist:win       # build the Windows targets specifically
 ```
+
+**Where the output goes:** everything is written to **`dist/`**, which is
+git-ignored — generated installers are never committed.
+
+On Windows, `npm run dist` produces:
+
+| File in `dist/` | What it is |
+| --- | --- |
+| `EasyGit Setup <version>.exe` | NSIS installer (lets the user pick the install folder, adds Start-menu/desktop shortcuts) |
+| `EasyGit-<version>-portable.exe` | Portable single-file app (run without installing) |
+| `win-unpacked/EasyGit.exe` | The unpacked app (also produced on its own by `npm run package`) |
+
+> macOS (`.dmg`) and Linux (`AppImage`) targets are configured too, but must be
+> built on (or targeted from) those platforms. **Windows is the priority and the
+> only target verified so far.**
+
+> **Windows build note:** the first build downloads electron-builder's signing
+> tools, whose archive contains macOS symlinks. Extracting them needs the
+> "Create symbolic links" privilege — enable **Windows Developer Mode**
+> (Settings → Privacy & security → For developers) or run the first build from an
+> elevated (admin) terminal. The app itself is **not** code-signed (no
+> certificate), so Windows SmartScreen may warn on first launch; signing is a
+> future step that needs a code-signing certificate.
+
+### Testing the packaged app
+
+1. Run `npm run package` (fastest — unpacked, no installer download needed).
+2. Double-click `dist/win-unpacked/EasyGit.exe`. **No `npm start`, no Node.js, no
+   terminal** — this is exactly the end-user experience.
+3. Confirm: the EasyGit icon shows in the window/taskbar; the header logo and the
+   credits/footer render with no broken images; Simple mode and the **✨ Suggest**
+   button work.
+
+### Updating the app icon / branding
+
+The app icon is generated from the EasyGit logo at
+`src/renderer/assets/logo.svg` (which is also the in-app header logo).
+
+1. Replace `src/renderer/assets/logo.svg`.
+2. Regenerate the packaging icons:
+   ```bash
+   npm run make-icons
+   ```
+   This writes **`build/icon.png`** (512px — used for Linux/macOS) and
+   **`build/icon.ico`** (multi-size Windows icon). Both are committed to the repo.
+3. Rebuild with `npm run dist`.
+
+### Optional: brand logo
+
+EasyGit currently ships **without** a separate brand logo image, and
+the UI does not depend on one, so nothing breaks. When the official asset becomes
+available, add it at:
+
+```
+src/renderer/assets/brand-logo.png
+```
+
+and wire it into the header where appropriate. Do **not** commit an unofficial or
+placeholder version.
 
 ---
 
@@ -184,7 +273,15 @@ src/
     app.js              #   controller: state + event wiring
     ui.js               #   DOM building / rendering
     labels.js           #   presentation helpers (time, action list)
+    assets/
+      logo.svg          #   EasyGit logo (header) + source for the app icon
+build/                  # packaging resources (committed): icon.ico, icon.png
+scripts/
+  make-icons.js         # regenerates build/ icons from the logo (not shipped)
 ```
+
+Packaging is configured in the `build` section of `package.json` (electron-builder).
+Build output goes to `dist/` (git-ignored).
 
 **Security:** the renderer runs with `contextIsolation` on and `nodeIntegration`
 off. It can only call the handful of functions exposed in `preload.js`.

@@ -86,7 +86,7 @@ function friendlyError(errorCode, rawDetail = '') {
       return {
         title: 'Git is not installed',
         detail:
-          'EasyGit needs Git to be installed on this computer. Please install Git and then restart EasyGit.',
+          'EasyGit needs Git to be installed on this computer. You can download Git for free from git-scm.com. After installing it, please restart EasyGit.',
       };
     case GitErrorCode.FOLDER_NOT_FOUND:
       return {

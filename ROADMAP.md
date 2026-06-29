@@ -71,10 +71,27 @@ before being added:
 
 ## 📦 Distribution
 
-- [ ] Package as installable desktop apps with **electron-builder**
-      (`.exe` / `.dmg` / `AppImage`) so users don't need Node.js installed.
-- [ ] Auto-update support.
-- [ ] App icon and branding assets.
+- [x] Package as an installable **Windows** desktop app with **electron-builder**
+      (NSIS installer + portable `.exe`) so users don't need Node.js installed.
+- [x] App icon and branding assets for EasyGit (generated from the logo into
+      `build/icon.ico` / `build/icon.png`; wired into the window, taskbar, and
+      installer via `package.json` → `build`).
+- [ ] Add macOS (`.dmg`) and Linux (`AppImage`) distributables. The
+      electron-builder config for these already exists, but they must be built on
+      their own platforms and have not been verified yet.
+- [ ] **Auto-update support — still pending.** Needs a release/update *hosting
+      strategy* first (e.g. a GitHub Releases or S3 feed) before wiring in
+      `electron-updater`. Deliberately not enabled yet: no release server URL,
+      tokens, or credentials are hardcoded. See the note below.
+- [ ] Optional **brand logo** integration once the official asset file
+      is available (documented placeholder path:
+      `src/renderer/assets/brand-logo.png`).
+
+> **Auto-update (future):** EasyGit is structured so auto-update can be added
+> later without rework — packaging already produces versioned artifacts. To enable
+> it, decide where releases will be hosted, publish artifacts there, add
+> `electron-updater`, and check for updates on startup. This is intentionally left
+> as a documented follow-up rather than half-implemented.
 
 ---
 
