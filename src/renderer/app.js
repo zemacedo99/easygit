@@ -236,11 +236,16 @@ function detailHandlers() {
     onSaveVersion: () => {
       const repo = currentRepo();
       if (!repo) return;
-      ui.showSaveVersionModal(async (message) => {
-        const res = await withBusy('Saving your version…', () => api.commitStaged(repo.id, message));
-        if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
-        else ui.showToast({ type: 'success', title: 'Version saved', body: res.message });
-        await checkRepo(repo.id, false);
+      ui.showSaveVersionModal({
+        onSave: async (message) => {
+          const res = await withBusy('Saving your version…', () => api.commitStaged(repo.id, message));
+          if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
+          else ui.showToast({ type: 'success', title: 'Version saved', body: res.message });
+          await checkRepo(repo.id, false);
+        },
+        // Advanced "Save a version" commits the staged changes, so base the
+        // suggestion on those.
+        onSuggest: () => api.suggestMessage(repo.id, { staged: true }),
       });
     },
 
@@ -374,6 +379,7 @@ function uploadChanges() {
   }
 
   const hasFileChanges = counts.working + counts.staged > 0;
+  let uploadHandlers; // defined below; referenced when re-prompting on retry
   const runUpload = async (message) => {
     const res = await withBusy(
       hasFileChanges ? 'Saving and uploading your changes…' : 'Uploading your saved changes…',
@@ -383,7 +389,7 @@ function uploadChanges() {
       // Changes may have appeared on disk since the last check: if the main
       // process now needs a description, ask for it and retry instead of erroring.
       if (res.error && /description/i.test(res.error.title)) {
-        ui.showUploadMessageModal(runUpload);
+        ui.showUploadMessageModal(uploadHandlers);
         return;
       }
       ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
@@ -395,8 +401,14 @@ function uploadChanges() {
     await checkRepo(repo.id, false);
   };
 
+  uploadHandlers = {
+    onSubmit: runUpload,
+    // Simple-mode upload saves all local changes, so suggest from those.
+    onSuggest: () => api.suggestMessage(repo.id, { staged: false }),
+  };
+
   if (hasFileChanges) {
-    ui.showUploadMessageModal(runUpload); // the busy overlay covers the wait
+    ui.showUploadMessageModal(uploadHandlers);
   } else {
     runUpload(null); // only saved versions waiting (or nothing) – no description needed
   }

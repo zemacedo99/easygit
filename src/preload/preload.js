@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('easygit', {
   unstage: (id, paths) => ipcRenderer.invoke('repos:unstage', id, paths),
   commitStaged: (id, message) => ipcRenderer.invoke('repos:commitStaged', id, message),
   uploadChanges: (id, message) => ipcRenderer.invoke('repos:uploadChanges', id, message),
+  suggestMessage: (id, options) => ipcRenderer.invoke('repos:suggestMessage', id, options),
   switchBranch: (id, name) => ipcRenderer.invoke('repos:switchBranch', id, name),
   revealFile: (id, relPath) => ipcRenderer.invoke('repos:revealFile', id, relPath),
 

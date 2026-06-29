@@ -822,22 +822,97 @@ function renderSimpleFlow(repo, details, handlers) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Ask the user for a description, then call onSave(message).
- * @param {(message: string) => void} onSave
+ * A description field with an optional "✨ Suggest" assistant button.
+ * @param {string} labelText
+ * @param {(() => Promise<{ok:boolean, message?:string, error?:string}>)|null} onSuggest
+ * @returns {{ wrapper: HTMLElement, textarea: HTMLElement }}
  */
-export function showSaveVersionModal(onSave) {
+function buildDescribeField(labelText, onSuggest) {
   const textarea = h('textarea', {
     className: 'input',
     placeholder: 'For example: Updated the homepage text',
   });
+  const status = h('div', { className: 'suggest-status', hidden: true });
+
+  const headerChildren = [h('label', { text: labelText })];
+  if (onSuggest) {
+    const suggestBtn = h(
+      'button',
+      {
+        className: 'btn btn-sm suggest-btn',
+        type: 'button',
+        title: 'Suggest a description',
+        onClick: async () => {
+          // Inline loading near the button only – never blocks the app.
+          suggestBtn.disabled = true;
+          status.hidden = false;
+          status.className = 'suggest-status loading';
+          status.textContent = '';
+          status.appendChild(h('span', { className: 'spinner-sm' }));
+          status.appendChild(h('span', { text: ' Looking at your changes…' }));
+
+          let res;
+          try {
+            res = await onSuggest();
+          } catch (e) {
+            res = { ok: false, error: 'read' };
+          }
+          suggestBtn.disabled = false;
+
+          if (res && res.ok && res.message) {
+            const apply = () => {
+              textarea.value = res.message;
+              status.hidden = true;
+              setTimeout(() => textarea.focus(), 0);
+            };
+            if (!textarea.value.trim()) {
+              apply(); // empty box -> just fill it
+            } else {
+              status.hidden = true;
+              showConfirm(
+                {
+                  title: 'Replace description?',
+                  message: `Replace your current description with the suggestion: “${res.message}”?`,
+                  confirmLabel: 'Replace',
+                },
+                apply
+              );
+            }
+          } else {
+            status.className = 'suggest-status note';
+            status.textContent =
+              res && res.error === 'none'
+                ? 'No changes found to describe.'
+                : 'EasyGit could not inspect your changes. You can still write the description yourself.';
+          }
+        },
+      },
+      [h('span', { className: 'btn-icon', text: '✨' }), ' Suggest']
+    );
+    headerChildren.push(suggestBtn);
+  }
+
+  const wrapper = h('div', { className: 'field' }, [
+    h('div', { className: 'field-row' }, headerChildren),
+    textarea,
+    status,
+  ]);
+  return { wrapper, textarea };
+}
+
+/**
+ * Ask the user for a description, then call onSave(message).
+ * @param {((message: string) => void) | {onSave: Function, onSuggest?: Function}} handlers
+ */
+export function showSaveVersionModal(handlers) {
+  const onSave = typeof handlers === 'function' ? handlers : handlers.onSave;
+  const onSuggest = typeof handlers === 'function' ? null : handlers.onSuggest;
+  const { wrapper, textarea } = buildDescribeField('Short description', onSuggest);
 
   const close = openModal({
     title: 'Save a version',
     subtitle: 'Describe what this saved version contains, so it is easy to recognise later.',
-    body: h('div', { className: 'field' }, [
-      h('label', { text: 'Short description' }),
-      textarea,
-    ]),
+    body: wrapper,
     footer: [
       h('button', { className: 'btn', onClick: () => close() }, 'Cancel'),
       h(
@@ -864,21 +939,17 @@ export function showSaveVersionModal(onSave) {
 
 /**
  * Simple-mode "Upload my changes": ask for a description, then call onUpload.
- * @param {(message: string) => void} onUpload
+ * @param {((message: string) => void) | {onSubmit: Function, onSuggest?: Function}} handlers
  */
-export function showUploadMessageModal(onUpload) {
-  const textarea = h('textarea', {
-    className: 'input',
-    placeholder: 'For example: Updated the homepage text',
-  });
+export function showUploadMessageModal(handlers) {
+  const onUpload = typeof handlers === 'function' ? handlers : handlers.onSubmit;
+  const onSuggest = typeof handlers === 'function' ? null : handlers.onSuggest;
+  const { wrapper, textarea } = buildDescribeField('Describe what you changed', onSuggest);
 
   const close = openModal({
     title: 'Upload my changes',
     subtitle: 'EasyGit will save these changes on your computer and upload them online.',
-    body: h('div', { className: 'field' }, [
-      h('label', { text: 'Describe what you changed' }),
-      textarea,
-    ]),
+    body: wrapper,
     footer: [
       h('button', { className: 'btn', onClick: () => close() }, 'Cancel'),
       h(

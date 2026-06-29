@@ -170,6 +170,7 @@ function registerIpcHandlers() {
   ipcMain.handle('repos:unstage', async (_e, id, paths) => repoManager.unstageFiles(id, paths));
   ipcMain.handle('repos:commitStaged', async (_e, id, message) => repoManager.commitStaged(id, message));
   ipcMain.handle('repos:uploadChanges', async (_e, id, message) => repoManager.uploadChanges(id, message));
+  ipcMain.handle('repos:suggestMessage', async (_e, id, options) => repoManager.suggestMessage(id, options || {}));
   ipcMain.handle('repos:switchBranch', async (_e, id, name) => repoManager.switchBranch(id, name));
 
   // --- Settings (simple/advanced mode, branch details) ---------------------

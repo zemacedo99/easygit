@@ -22,6 +22,7 @@ const git = require('./gitService');
 const storage = require('./storage');
 const scanner = require('./scanner');
 const interpreter = require('./statusInterpreter');
+const suggester = require('./suggestMessage');
 const { Status, STATUS_INFO, friendlyError } = require('./messages');
 const urls = require('./urls');
 
@@ -523,6 +524,38 @@ async function uploadChanges(id, message) {
   };
 }
 
+/**
+ * Suggest a friendly change description from the changed files (read-only).
+ * Looks only at file names + change types — never file contents, never network.
+ * @param {string} id
+ * @param {object} [options]
+ * @param {boolean} [options.staged]  Base it on staged changes only (advanced).
+ * @returns {Promise<{ok: boolean, message?: string, error?: string}>}
+ *   error: 'not-found' | 'read' | 'none'
+ */
+async function suggestMessage(id, options = {}) {
+  const repo = findById(id);
+  if (!repo) return { ok: false, error: 'not-found' };
+
+  const detailed = await git.getDetailedStatus(repo.path);
+  if (!detailed.ok) return { ok: false, error: 'read' };
+
+  let files;
+  if (options.staged) {
+    files = detailed.staged.slice();
+  } else {
+    // All local changes that will be uploaded (working + staged), de-duped.
+    const byPath = new Map();
+    [...detailed.staged, ...detailed.working].forEach((f) => {
+      if (!byPath.has(f.path)) byPath.set(f.path, f);
+    });
+    files = [...byPath.values()];
+  }
+
+  if (files.length === 0) return { ok: false, error: 'none' };
+  return { ok: true, message: suggester.suggestCommitMessage(files) };
+}
+
 /** Switch to another existing local version line (branch). Never creates/deletes. */
 async function switchBranch(id, name) {
   const repo = findById(id);
@@ -654,6 +687,7 @@ module.exports = {
   unstageFiles,
   commitStaged,
   uploadChanges,
+  suggestMessage,
   switchBranch,
   download,
   upload,
