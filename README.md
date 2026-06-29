@@ -41,6 +41,31 @@ not.
 
 ---
 
+## Download the latest version
+
+**Latest release: v1.1.0.** Pick a download below, then follow
+[Installing EasyGit](#installing-easygit). Node.js is **not** required; **Git**
+must be installed.
+
+| Download | Best for | File |
+| --- | --- | --- |
+| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 1.1.0.exe`](versions/v1.1.0/EasyGit%20Setup%201.1.0.exe) |
+| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-1.1.0-portable.exe`](versions/v1.1.0/EasyGit-1.1.0-portable.exe) |
+
+- The app is currently **unsigned**, so Windows SmartScreen may warn on first
+  launch ("Windows protected your PC" → **More info** → **Run anyway**).
+- **Verify your download** against the checksums in
+  [`versions/v1.1.0/SHA256SUMS.txt`](versions/v1.1.0/SHA256SUMS.txt):
+  ```powershell
+  Get-FileHash ".\versions\v1.1.0\EasyGit Setup 1.1.0.exe" -Algorithm SHA256
+  ```
+- Full notes: [`versions/v1.1.0/RELEASE_NOTES.md`](versions/v1.1.0/RELEASE_NOTES.md).
+
+**Older releases** are kept under [`versions/`](versions/) (for example,
+`versions/v1.0.0/`).
+
+---
+
 ## Installing EasyGit
 
 **For everyday users — no Node.js, no commands, no terminal.**
