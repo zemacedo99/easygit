@@ -31,14 +31,19 @@ complex one*. Everything below "Future ideas" is optional and not yet built.
 
 ## 🔜 Near-term polish
 
-- [ ] **Edit the friendly name** inline from the list (rename exists in details).
+- [x] **Edit the friendly name** inline from the list (pencil on each card;
+      reuses the rename dialog).
 - [ ] **Auto-refresh on a timer** (opt-in), e.g. re-check every N minutes.
-- [ ] **Search / filter** the repository list when there are many repos.
-- [ ] **Sort** by status (e.g. show "needs action" first).
-- [ ] **Light theme** and font-size option for accessibility.
+- [x] **Search / filter** the repository list (slim search box, shown when there
+      are 2+ projects).
+- [x] **Sort** by status (default "needs action first"; also Name, Recently
+      checked, Order added — persisted in settings).
+- [x] **Light theme** and text-size option for accessibility (both off by
+      default, in Settings → Appearance).
 - [ ] Remember the **last scanned folder** and offer common shortcuts
-      (Desktop, Documents, a Development folder).
-- [ ] Show a clearer per-action **busy/spinner state** on the buttons themselves.
+      (Desktop, Documents, a Development folder). *(Scan roots are already
+      persisted; surfacing them as shortcuts is still to do.)*
+- [x] Show a clearer per-action **busy/spinner state** on the buttons themselves.
 
 ---
 
@@ -97,7 +102,8 @@ before being added:
 
 ## 🧪 Quality
 
-- [ ] Unit tests for the pure logic modules (`statusInterpreter`, `urls`,
-      `scanner`, error classification in `gitService`).
+- [x] Unit tests for the pure logic modules (`statusInterpreter`, `urls`,
+      `scanner`, error classification in `gitService`, plus `suggestMessage`,
+      `messages`, and the list `repoSort` helper). Run with `npm test`.
 - [ ] Integration tests that run against throwaway temporary Git repositories.
 - [ ] Continuous integration to run the tests on each change.
