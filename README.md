@@ -162,6 +162,13 @@ src/renderer/assets/brand-logo.png
 and wire it into the header where appropriate. Do **not** commit an unofficial or
 placeholder version.
 
+### Releasing a new version
+
+EasyGit releases are versioned with a Git tag (e.g. `v1.0.0`) and a committed
+`versions/vX.Y.Z/` folder containing the installer, portable `.exe`,
+`SHA256SUMS.txt`, and release notes. For the full step-by-step process, see
+[Release Process](docs/RELEASE_PROCESS.md).
+
 ---
 
 ## What you can do
