@@ -158,26 +158,61 @@ function statusBadge(tone, label, checking = false) {
 
 /**
  * Render the list of repositories.
- * @param {object[]} repos
+ * @param {object[]} repos  the repos to show (already filtered + sorted)
  * @param {string|null} selectedId
  * @param {(id: string) => void} onSelect
  * @param {Set<string>} checkingIds  repos currently being checked
+ * @param {{total?: number, query?: string, onRename?: (id: string) => void}} [opts]
  */
-export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Set()) {
+export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Set(), opts = {}) {
   const listEl = document.getElementById('repo-list');
   const emptyEl = document.getElementById('empty-state');
   const countEl = document.getElementById('repo-count');
 
-  countEl.textContent = String(repos.length);
+  const total = opts.total != null ? opts.total : repos.length;
+  const filtering = !!(opts.query && opts.query.trim());
+  // When filtering, show "shown/total" so it's clear some are hidden.
+  countEl.textContent = filtering ? `${repos.length}/${total}` : String(total);
   listEl.textContent = '';
 
-  if (repos.length === 0) {
+  // No repositories at all → the big empty state.
+  if (total === 0) {
     emptyEl.hidden = false;
     return;
   }
   emptyEl.hidden = true;
 
+  // Repositories exist, but the search filtered them all out.
+  if (repos.length === 0) {
+    listEl.appendChild(
+      h('div', { className: 'list-nomatch' }, [
+        h('div', { className: 'empty-emoji', text: '🔍' }),
+        h('p', { text: 'No projects match your search.' }),
+      ])
+    );
+    return;
+  }
+
   for (const repo of repos) {
+    const nameRow = [h('p', { className: 'repo-name', text: repo.name })];
+    if (opts.onRename) {
+      nameRow.push(
+        h(
+          'button',
+          {
+            className: 'icon-btn repo-rename-btn',
+            title: 'Rename this project',
+            'aria-label': `Rename ${repo.name}`,
+            onClick: (e) => {
+              e.stopPropagation(); // don't also select the card
+              opts.onRename(repo.id);
+            },
+          },
+          '✏️'
+        )
+      );
+    }
+
     const card = h(
       'div',
       {
@@ -186,8 +221,8 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
       },
       [
         h('div', { className: 'repo-card-top' }, [
-          h('div', {}, [
-            h('p', { className: 'repo-name', text: repo.name }),
+          h('div', { className: 'repo-card-id' }, [
+            h('div', { className: 'repo-name-row' }, nameRow),
             h('p', { className: 'repo-path', text: repo.path }),
           ]),
           statusBadge(repo.statusTone, repo.statusLabel, checkingIds.has(repo.id)),

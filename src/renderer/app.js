@@ -9,6 +9,7 @@
  */
 
 import * as ui from './ui.js';
+import { sortAndFilterRepos } from './repoSort.mjs';
 
 const api = window.easygit;
 
@@ -18,7 +19,8 @@ const state = {
   selectedId: null,     // currently selected repo id
   details: {},          // id -> last status-check result details
   checking: new Set(),  // ids currently being checked (for the spinner badge)
-  settings: { showAdvanced: false, showBranch: false }, // persisted preferences
+  filter: '',           // current repo-list search text (not persisted)
+  settings: { showAdvanced: false, showBranch: false, sortBy: 'attention' }, // persisted preferences
 };
 
 /* ------------------------------------------------------------------ */
@@ -53,9 +55,31 @@ async function refreshRepos() {
 }
 
 function rerender() {
-  ui.renderRepoList(state.repos, state.selectedId, selectRepo, state.checking);
+  const shown = sortAndFilterRepos(state.repos, state.filter, state.settings.sortBy);
+  // The search/sort toolbar only appears once there are enough projects to
+  // benefit from it, keeping the default experience uncluttered.
+  const toolbar = document.getElementById('list-toolbar');
+  if (toolbar) toolbar.hidden = state.repos.length < 2;
+  ui.renderRepoList(shown, state.selectedId, selectRepo, state.checking, {
+    total: state.repos.length,
+    query: state.filter,
+    onRename: renameRepoById,
+  });
   const repo = currentRepo();
   ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers(), state.settings);
+}
+
+/** Rename a repository directly from the list (reuses the rename dialog + IPC). */
+function renameRepoById(id) {
+  const repo = state.repos.find((r) => r.id === id);
+  if (!repo) return;
+  ui.showRenameModal(repo.name, async (name) => {
+    const res = await api.renameRepo(repo.id, name);
+    if (res.ok) {
+      replaceRepo(res.repo);
+      rerender();
+    }
+  });
 }
 
 function currentRepo() {
@@ -84,6 +108,23 @@ function wireGlobalButtons() {
   document.getElementById('btn-scan').addEventListener('click', onScan);
   document.getElementById('btn-add').addEventListener('click', onAdd);
   document.getElementById('btn-check-all').addEventListener('click', onCheckAll);
+
+  // Repository list search + sort.
+  const search = document.getElementById('repo-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      state.filter = search.value;
+      rerender();
+    });
+  }
+  const sort = document.getElementById('repo-sort');
+  if (sort) {
+    sort.value = state.settings.sortBy || 'attention';
+    sort.addEventListener('change', async () => {
+      state.settings = await api.setSettings({ sortBy: sort.value });
+      rerender();
+    });
+  }
 }
 
 /** "Add repository folder" – pick a folder and validate it's a repo. */

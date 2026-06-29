@@ -294,6 +294,84 @@ body {
   color: var(--text-faint);
 }
 
+/* Name row + inline rename affordance (revealed on hover/focus) */
+.repo-card-id {
+  min-width: 0; /* allow long paths to wrap instead of overflowing */
+}
+.repo-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.repo-rename-btn {
+  opacity: 0;
+  font-size: 12px;
+  transition: opacity 0.12s ease;
+}
+.repo-card:hover .repo-rename-btn,
+.repo-card:focus-within .repo-rename-btn {
+  opacity: 1;
+}
+
+/* Search + sort toolbar above the repository list */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.list-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+.list-search:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+.list-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.list-sort-label {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.list-sort-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  font-size: 12.5px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.list-sort-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* "No projects match your search" */
+.list-nomatch {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px 12px;
+}
+.list-nomatch .empty-emoji {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
 /* Status badge */
 .badge {
   display: inline-flex;
