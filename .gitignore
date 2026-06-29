@@ -29,6 +29,13 @@ release/
 # Temp file produced by scripts/make-icons.js (auto-deleted; ignore stray copies)
 src/renderer/assets/_icon_tmp.html
 
+# Exception: versioned release artifacts are intentionally kept in the repo for
+# this internal tool. Generated build output in dist/ stays ignored above; only
+# the executables placed under versions/ are tracked.
+!versions/
+!versions/**
+!versions/**/*.exe
+
 # Local runtime data (EasyGit stores its repo list in the OS userData folder,
 # not here, but ignore any stray local copies just in case)
 repositories.json
