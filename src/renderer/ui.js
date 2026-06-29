@@ -54,18 +54,47 @@ export function h(tag, attrs = {}, children = []) {
 /**
  * @param {{type?: 'info'|'success'|'error'|'warn', title: string, body?: string}} opts
  */
+const MAX_TOASTS = 5;
+
 export function showToast({ type = 'info', title, body = '' }) {
   const container = document.getElementById('toast-container');
   const toast = h('div', { className: `toast ${type}` }, [
+    h('button', {
+      className: 'toast-close',
+      title: 'Dismiss',
+      'aria-label': 'Dismiss',
+      onClick: () => {
+        toast.remove();
+        refreshClearAll(container);
+      },
+    }, '×'),
     h('div', { className: 'toast-title', text: title }),
     body ? h('div', { className: 'toast-body', text: body }) : null,
   ]);
+  // Notifications stay until the user closes them (no auto-dismiss). Cap the
+  // count so they can't pile up forever – drop the oldest beyond the limit.
   container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.transition = 'opacity 0.3s ease';
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }, 4500);
+  const toasts = container.querySelectorAll('.toast');
+  for (let i = 0; i < toasts.length - MAX_TOASTS; i++) toasts[i].remove();
+  refreshClearAll(container);
+}
+
+/** Show a "Clear all" control only while 2+ notifications are visible. */
+function refreshClearAll(container) {
+  let clear = container.querySelector('.toast-clear-all');
+  const count = container.querySelectorAll('.toast').length;
+  if (count >= 2 && !clear) {
+    clear = h('button', {
+      className: 'toast-clear-all',
+      onClick: () => {
+        container.querySelectorAll('.toast').forEach((t) => t.remove());
+        refreshClearAll(container);
+      },
+    }, 'Clear all');
+    container.insertBefore(clear, container.firstChild);
+  } else if (count < 2 && clear) {
+    clear.remove();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1159,38 +1188,43 @@ export function openModalSimple(title, message) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Busy / "please wait" overlay                                        */
+/* Contextual busy indicators (no global blocking overlay)             */
 /* ------------------------------------------------------------------ */
 
-let busyEl = null;
-
-/**
- * Show (or update) a blocking "please wait" overlay with a spinner + message.
- * Safe to call repeatedly – it reuses the single overlay and just updates text.
- * @param {string} [message]
- */
-export function showBusy(message) {
-  const text = message || 'Working…';
-  if (busyEl) {
-    const t = busyEl.querySelector('.busy-text');
-    if (t) t.textContent = text;
-    return;
-  }
-  busyEl = h('div', { className: 'busy-overlay' }, [
-    h('div', { className: 'busy-card' }, [
-      h('div', { className: 'busy-spinner' }),
-      h('div', { className: 'busy-text', text }),
-    ]),
-  ]);
-  document.getElementById('modal-root').appendChild(busyEl);
+/** Disable the selected repository's action buttons while an op runs. */
+export function setRepoBusy(on) {
+  const d = document.getElementById('details');
+  if (d) d.classList.toggle('busy', !!on);
 }
 
-/** Hide the "please wait" overlay (no-op if not shown). */
-export function hideBusy() {
-  if (busyEl) {
-    busyEl.remove();
-    busyEl = null;
-  }
+/** Show a small inline "working…" status at the top of the details panel. */
+export function showRepoBusy(message) {
+  const el = document.getElementById('repo-busy');
+  if (!el) return;
+  const t = el.querySelector('.repo-busy-text');
+  if (t) t.textContent = message || 'Working…';
+  el.hidden = false;
+}
+
+/** Hide the details-panel inline busy status. */
+export function hideRepoBusy() {
+  const el = document.getElementById('repo-busy');
+  if (el) el.hidden = true;
+}
+
+/** Show a small inline busy status in the top header (for non-repo actions). */
+export function showHeaderBusy(message) {
+  const el = document.getElementById('header-busy');
+  if (!el) return;
+  const t = el.querySelector('.header-busy-text');
+  if (t) t.textContent = message || 'Working…';
+  el.hidden = false;
+}
+
+/** Hide the header inline busy status. */
+export function hideHeaderBusy() {
+  const el = document.getElementById('header-busy');
+  if (el) el.hidden = true;
 }
 
 /**

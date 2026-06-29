@@ -48,11 +48,15 @@ app.whenReady().then(async () => {
   await shot('25-busy-checking.png');
   await wait(900);
 
-  // Capture the "Downloading…" overlay (mock download takes ~1100ms).
+  // Capture the inline "Downloading…" indicator (mock download takes ~1100ms).
   await run("window.__demo.clickByText('Download latest version')");
   await wait(500);
   await shot('26-busy-download.png');
-  await wait(1200);
+
+  // After completion: the inline indicator is gone and a persistent toast
+  // (with an × close button) remains in the bottom-left.
+  await wait(1400);
+  await shot('27-toast-persistent.png');
 
   try { fs.unlinkSync(SEED); } catch (e) {}
   await wait(150);

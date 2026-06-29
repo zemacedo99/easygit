@@ -23,6 +23,10 @@
       </div>
 
       <div class="topbar-actions">
+        <span id="header-busy" class="header-busy" role="status" aria-live="polite" hidden>
+          <span class="spinner-sm" aria-hidden="true"></span>
+          <span class="header-busy-text"></span>
+        </span>
         <button id="btn-scan" class="btn btn-primary">
           <span class="btn-icon">🔍</span> Auto-find Git repositories
         </button>
@@ -72,6 +76,11 @@
 
       <!-- Right: details for the selected repository -->
       <section class="panel panel-details" aria-label="Repository details">
+        <!-- Contextual busy indicator for the selected repository (non-blocking) -->
+        <div id="repo-busy" class="repo-busy" role="status" aria-live="polite" hidden>
+          <span class="spinner-sm" aria-hidden="true"></span>
+          <span class="repo-busy-text"></span>
+        </div>
         <div id="details-empty" class="empty-state">
           <div class="empty-emoji">👈</div>
           <h3>Select a repository</h3>

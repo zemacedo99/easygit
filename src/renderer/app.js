@@ -91,14 +91,20 @@ async function onAdd() {
   const folder = await api.pickFolder('Choose a repository folder to add');
   if (!folder) return;
 
-  const res = await withBusy('Adding repository…', () => api.addRepo(folder));
-  if (!res.ok) {
-    ui.openModalSimple(res.error.title, res.error.detail);
-    return;
+  const btn = document.getElementById('btn-add');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await withBusy('Adding repository…', () => api.addRepo(folder), { scope: 'header' });
+    if (!res.ok) {
+      ui.openModalSimple(res.error.title, res.error.detail);
+      return;
+    }
+    await refreshRepos();
+    selectRepo(res.repo.id);
+    ui.showToast({ type: 'success', title: 'Repository added', body: res.repo.name });
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  await refreshRepos();
-  selectRepo(res.repo.id);
-  ui.showToast({ type: 'success', title: 'Repository added', body: res.repo.name });
 }
 
 /**
@@ -445,23 +451,37 @@ async function checkRepo(id, fetch) {
 }
 
 /**
- * Show a blocking "please wait" overlay while an async operation runs. The
- * overlay is deferred by a short delay so instant actions never flash it, but
- * any real wait (uploads, downloads, network checks…) gets clear feedback.
+ * Show a small, NON-blocking busy indicator while an async operation runs.
+ * - scope 'repo' (default): inline status at the top of the details panel and
+ *   the selected repo's action buttons are disabled (prevents double-clicks).
+ * - scope 'header': a small status in the top header (for non-repo actions).
+ * The inline status is deferred so instant actions never flash it, but the
+ * controls are disabled immediately. The rest of the app stays visible/usable.
  * @param {string} message
  * @param {() => Promise<any>} fn
+ * @param {{scope?: 'repo'|'header', delay?: number}} [opts]
  */
-async function withBusy(message, fn, delay = 150) {
+async function withBusy(message, fn, opts = {}) {
+  const scope = opts.scope || 'repo';
+  const delay = opts.delay != null ? opts.delay : 150;
+  if (scope === 'repo') ui.setRepoBusy(true); // disable repo actions right away
+
   let shown = false;
   const timer = setTimeout(() => {
-    ui.showBusy(message);
+    if (scope === 'header') ui.showHeaderBusy(message);
+    else ui.showRepoBusy(message);
     shown = true;
   }, delay);
+
   try {
     return await fn();
   } finally {
     clearTimeout(timer);
-    if (shown) ui.hideBusy();
+    if (shown) {
+      if (scope === 'header') ui.hideHeaderBusy();
+      else ui.hideRepoBusy();
+    }
+    if (scope === 'repo') ui.setRepoBusy(false);
   }
 }
 
