@@ -27,8 +27,9 @@ function toBrowserUrl(remoteUrl) {
     return stripGitSuffix(url);
   }
 
-  // scp-like SSH: git@host:user/repo.git
-  const scpMatch = url.match(/^[^@]+@([^:]+):(.+)$/);
+  // scp-like SSH: git@host:user/repo.git  (only when there is no ://-scheme,
+  // otherwise this would wrongly capture a port from a full ssh:// URL).
+  const scpMatch = !url.includes('://') && url.match(/^[^@]+@([^:]+):(.+)$/);
   if (scpMatch) {
     const host = scpMatch[1];
     const repoPath = scpMatch[2];
