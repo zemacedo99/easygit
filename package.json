@@ -1,7 +1,7 @@
 {
   "name": "easygit",
   "productName": "EasyGit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Manage your projects without learning Git",
   "private": true,
   "main": "src/main/main.js",
@@ -50,11 +50,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
@@ -71,12 +75,16 @@
       "artifactName": "EasyGit-${version}-portable.${ext}"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "build/icon.png",
       "category": "public.app-category.developer-tools"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "icon": "build/icon.png",
       "category": "Development"
     }
