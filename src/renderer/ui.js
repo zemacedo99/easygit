@@ -158,26 +158,61 @@ function statusBadge(tone, label, checking = false) {
 
 /**
  * Render the list of repositories.
- * @param {object[]} repos
+ * @param {object[]} repos  the repos to show (already filtered + sorted)
  * @param {string|null} selectedId
  * @param {(id: string) => void} onSelect
  * @param {Set<string>} checkingIds  repos currently being checked
+ * @param {{total?: number, query?: string, onRename?: (id: string) => void}} [opts]
  */
-export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Set()) {
+export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Set(), opts = {}) {
   const listEl = document.getElementById('repo-list');
   const emptyEl = document.getElementById('empty-state');
   const countEl = document.getElementById('repo-count');
 
-  countEl.textContent = String(repos.length);
+  const total = opts.total != null ? opts.total : repos.length;
+  const filtering = !!(opts.query && opts.query.trim());
+  // When filtering, show "shown/total" so it's clear some are hidden.
+  countEl.textContent = filtering ? `${repos.length}/${total}` : String(total);
   listEl.textContent = '';
 
-  if (repos.length === 0) {
+  // No repositories at all → the big empty state.
+  if (total === 0) {
     emptyEl.hidden = false;
     return;
   }
   emptyEl.hidden = true;
 
+  // Repositories exist, but the search filtered them all out.
+  if (repos.length === 0) {
+    listEl.appendChild(
+      h('div', { className: 'list-nomatch' }, [
+        h('div', { className: 'empty-emoji', text: '🔍' }),
+        h('p', { text: 'No projects match your search.' }),
+      ])
+    );
+    return;
+  }
+
   for (const repo of repos) {
+    const nameRow = [h('p', { className: 'repo-name', text: repo.name })];
+    if (opts.onRename) {
+      nameRow.push(
+        h(
+          'button',
+          {
+            className: 'icon-btn repo-rename-btn',
+            title: 'Rename this project',
+            'aria-label': `Rename ${repo.name}`,
+            onClick: (e) => {
+              e.stopPropagation(); // don't also select the card
+              opts.onRename(repo.id);
+            },
+          },
+          '✏️'
+        )
+      );
+    }
+
     const card = h(
       'div',
       {
@@ -186,8 +221,8 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
       },
       [
         h('div', { className: 'repo-card-top' }, [
-          h('div', {}, [
-            h('p', { className: 'repo-name', text: repo.name }),
+          h('div', { className: 'repo-card-id' }, [
+            h('div', { className: 'repo-name-row' }, nameRow),
             h('p', { className: 'repo-path', text: repo.path }),
           ]),
           statusBadge(repo.statusTone, repo.statusLabel, checkingIds.has(repo.id)),
@@ -309,10 +344,31 @@ export function renderDetails(repo, details, handlers, settings) {
 /* ------------------------------------------------------------------ */
 
 function actionButton(icon, label, onClick, primary) {
-  return h('button', { className: 'btn btn-sm' + (primary ? ' btn-primary' : ''), onClick }, [
+  const btn = h('button', { className: 'btn btn-sm' + (primary ? ' btn-primary' : '') }, [
     h('span', { className: 'btn-icon', text: icon }),
     ' ' + label,
   ]);
+  btn.addEventListener('click', () => runMaybeBusy(btn, onClick));
+  return btn;
+}
+
+/**
+ * Run a button's click handler. If the handler returns a promise (a real,
+ * long-running action), show a spinner on that button and disable it until the
+ * promise settles — clear per-action feedback. Handlers that just open a dialog
+ * return nothing, so the button does not spin.
+ */
+function runMaybeBusy(btn, onClick) {
+  const ret = onClick();
+  if (ret && typeof ret.then === 'function' && !btn.classList.contains('btn-busy')) {
+    btn.classList.add('btn-busy');
+    btn.disabled = true;
+    Promise.resolve(ret).finally(() => {
+      btn.classList.remove('btn-busy');
+      btn.disabled = false;
+    });
+  }
+  return ret;
 }
 
 function dangerButton(icon, label, onClick) {
@@ -1323,12 +1379,44 @@ export function showSettingsModal(settings, onChange) {
     ]);
   };
 
+  // A labelled dropdown setting (text on the left, choices on the right).
+  const choice = (key, title, desc, options, fallback) => {
+    const sel = h('select', { className: 'setting-select' });
+    const value = current[key] || fallback;
+    options.forEach(([val, label]) => {
+      const o = h('option', { value: val, text: label });
+      if (val === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+      current[key] = sel.value;
+      onChange({ ...current });
+    });
+    return h('label', { className: 'setting-row setting-row-choice' }, [
+      h('div', { className: 'setting-grow' }, [
+        h('div', { className: 'setting-title', text: title }),
+        h('div', { className: 'setting-desc', text: desc }),
+      ]),
+      sel,
+    ]);
+  };
+
   const close = openModal({
     title: 'Settings',
     subtitle: 'These preferences are remembered between launches.',
     body: h('div', { className: 'settings-list' }, [
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
+      h('div', { className: 'settings-section', text: 'Appearance' }),
+      choice('theme', 'Theme', 'Switch between the dark and light look.', [
+        ['dark', 'Dark'],
+        ['light', 'Light'],
+      ], 'dark'),
+      choice('fontSize', 'Text size', 'Make everything in EasyGit larger and easier to read.', [
+        ['normal', 'Normal'],
+        ['large', 'Large'],
+        ['larger', 'Larger'],
+      ], 'normal'),
     ]),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });

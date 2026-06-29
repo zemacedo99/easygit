@@ -9,6 +9,7 @@
  */
 
 import * as ui from './ui.js';
+import { sortAndFilterRepos } from './repoSort.mjs';
 
 const api = window.easygit;
 
@@ -18,7 +19,8 @@ const state = {
   selectedId: null,     // currently selected repo id
   details: {},          // id -> last status-check result details
   checking: new Set(),  // ids currently being checked (for the spinner badge)
-  settings: { showAdvanced: false, showBranch: false }, // persisted preferences
+  filter: '',           // current repo-list search text (not persisted)
+  settings: { showAdvanced: false, showBranch: false, sortBy: 'attention' }, // persisted preferences
 };
 
 /* ------------------------------------------------------------------ */
@@ -34,12 +36,13 @@ async function init() {
     /* ignore – non-fatal */
   }
 
-  // Load persisted preferences (simple/advanced mode, branch details).
+  // Load persisted preferences (simple/advanced mode, branch details, appearance).
   try {
     state.settings = await api.getSettings();
   } catch (e) {
     /* ignore – keep defaults */
   }
+  applyAppearance(state.settings);
 
   subscribeProgress();
   wireGlobalButtons();
@@ -53,9 +56,31 @@ async function refreshRepos() {
 }
 
 function rerender() {
-  ui.renderRepoList(state.repos, state.selectedId, selectRepo, state.checking);
+  const shown = sortAndFilterRepos(state.repos, state.filter, state.settings.sortBy);
+  // The search/sort toolbar only appears once there are enough projects to
+  // benefit from it, keeping the default experience uncluttered.
+  const toolbar = document.getElementById('list-toolbar');
+  if (toolbar) toolbar.hidden = state.repos.length < 2;
+  ui.renderRepoList(shown, state.selectedId, selectRepo, state.checking, {
+    total: state.repos.length,
+    query: state.filter,
+    onRename: renameRepoById,
+  });
   const repo = currentRepo();
   ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers(), state.settings);
+}
+
+/** Rename a repository directly from the list (reuses the rename dialog + IPC). */
+function renameRepoById(id) {
+  const repo = state.repos.find((r) => r.id === id);
+  if (!repo) return;
+  ui.showRenameModal(repo.name, async (name) => {
+    const res = await api.renameRepo(repo.id, name);
+    if (res.ok) {
+      replaceRepo(res.repo);
+      rerender();
+    }
+  });
 }
 
 function currentRepo() {
@@ -84,6 +109,23 @@ function wireGlobalButtons() {
   document.getElementById('btn-scan').addEventListener('click', onScan);
   document.getElementById('btn-add').addEventListener('click', onAdd);
   document.getElementById('btn-check-all').addEventListener('click', onCheckAll);
+
+  // Repository list search + sort.
+  const search = document.getElementById('repo-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      state.filter = search.value;
+      rerender();
+    });
+  }
+  const sort = document.getElementById('repo-sort');
+  if (sort) {
+    sort.value = state.settings.sortBy || 'attention';
+    sort.addEventListener('change', async () => {
+      state.settings = await api.setSettings({ sortBy: sort.value });
+      rerender();
+    });
+  }
 }
 
 /** "Add repository folder" – pick a folder and validate it's a repo. */
@@ -221,7 +263,9 @@ function showGlobalSummary() {
 
 function detailHandlers() {
   return {
-    onCheck: (fetch) => { const r = currentRepo(); if (r) doCheck(r.id, !!fetch); },
+    // Return the promises so the clicked button can show a spinner while the
+    // (long) action runs. Modal-openers below intentionally return nothing.
+    onCheck: (fetch) => { const r = currentRepo(); if (r) return doCheck(r.id, !!fetch); },
     onSettings: () => openSettings(),
 
     // Simple mode: one-click "Upload my changes" (save + upload as needed)
@@ -249,8 +293,8 @@ function detailHandlers() {
       });
     },
 
-    onUpload: () => { const r = currentRepo(); if (r) runAction(r, () => api.upload(r.id), 'Uploading your saved versions…'); },
-    onDownload: () => { const r = currentRepo(); if (r) handleDownload(r); },
+    onUpload: () => { const r = currentRepo(); if (r) return runAction(r, () => api.upload(r.id), 'Uploading your saved versions…'); },
+    onDownload: () => { const r = currentRepo(); if (r) return handleDownload(r); },
     onSwitchBranch: (name) => switchVersionLine(name),
     onReveal: (relPath) => { const r = currentRepo(); if (r) api.revealFile(r.id, relPath); },
 
@@ -355,8 +399,22 @@ function switchVersionLine(name) {
 function openSettings() {
   ui.showSettingsModal(state.settings, async (newSettings) => {
     state.settings = await api.setSettings(newSettings);
+    applyAppearance(state.settings);
     rerender();
   });
+}
+
+/** Map the font-size preference to a whole-UI zoom factor. */
+const FONT_ZOOM = { normal: 1, large: 1.15, larger: 1.3 };
+
+/**
+ * Apply appearance preferences (theme + font size). Both default to the
+ * original look, so the simple experience is unchanged unless the user opts in.
+ */
+function applyAppearance(settings) {
+  const theme = settings && settings.theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  if (api.setZoom) api.setZoom(FONT_ZOOM[(settings && settings.fontSize) || 'normal'] || 1);
 }
 
 /**
@@ -410,7 +468,7 @@ function uploadChanges() {
   if (hasFileChanges) {
     ui.showUploadMessageModal(uploadHandlers);
   } else {
-    runUpload(null); // only saved versions waiting (or nothing) – no description needed
+    return runUpload(null); // only saved versions waiting (or nothing) – no description needed
   }
 }
 
@@ -430,7 +488,7 @@ async function handleDownload(repo) {
       doDownload
     );
   } else {
-    doDownload();
+    return doDownload();
   }
 }
 

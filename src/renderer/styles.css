@@ -37,6 +37,34 @@
     sans-serif;
 }
 
+/* Light theme: opt-in via Settings (data-theme="light" on <html>). Overrides the
+   structural palette; keeps the brand/primary/accent colours. Status tones are
+   darkened for readable contrast on light surfaces. */
+:root[data-theme='light'] {
+  --bg: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-elevated: #e2e8f0;
+  --text: #0f172a;
+  --text-dim: #475569;
+  --text-faint: #64748b;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+
+  --tone-good: #15803d;
+  --tone-changes: #b45309;
+  --tone-upload: #0369a1;
+  --tone-download: #6d28d9;
+  --tone-both: #be123c;
+  --tone-neutral: #475569;
+  --tone-error: #b91c1c;
+}
+/* A few spots use fixed light-on-dark colours; fix them for the light theme. */
+:root[data-theme='light'] .banner-error { color: #b91c1c; }
+:root[data-theme='light'] .banner-info { color: #1e3a8a; }
+
 * {
   box-sizing: border-box;
 }
@@ -292,6 +320,84 @@ body {
 }
 .repo-meta .meta-label {
   color: var(--text-faint);
+}
+
+/* Name row + inline rename affordance (revealed on hover/focus) */
+.repo-card-id {
+  min-width: 0; /* allow long paths to wrap instead of overflowing */
+}
+.repo-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.repo-rename-btn {
+  opacity: 0;
+  font-size: 12px;
+  transition: opacity 0.12s ease;
+}
+.repo-card:hover .repo-rename-btn,
+.repo-card:focus-within .repo-rename-btn {
+  opacity: 1;
+}
+
+/* Search + sort toolbar above the repository list */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.list-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+.list-search:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+.list-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.list-sort-label {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.list-sort-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  font-size: 12.5px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.list-sort-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* "No projects match your search" */
+.list-nomatch {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px 12px;
+}
+.list-nomatch .empty-emoji {
+  font-size: 28px;
+  margin-bottom: 6px;
 }
 
 /* Status badge */
@@ -966,6 +1072,30 @@ textarea.input {
 .setting-row .file-check { margin-top: 2px; }
 .setting-title { font-weight: 600; font-size: 14px; }
 .setting-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.settings-section {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.setting-row-choice { align-items: center; cursor: default; }
+.setting-grow { flex: 1 1 auto; min-width: 0; }
+.setting-select {
+  flex: none;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.setting-select:focus { outline: none; border-color: var(--primary); }
 
 /* =========================================================================
    Branding & credits (brand logo in header, credits in footer)
@@ -1009,6 +1139,27 @@ textarea.input {
   border: 2px solid rgba(255, 255, 255, 0.2);
   border-top-color: var(--primary);
   animation: busy-spin 0.8s linear infinite;
+}
+
+/* Per-action feedback: the clicked button shows an inline spinner while its
+   (long) operation runs. The label is hidden under the spinner; size is kept. */
+.btn.btn-busy {
+  color: transparent !important;
+  position: relative;
+  pointer-events: none;
+}
+.btn.btn-busy::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: busy-spin 0.7s linear infinite;
 }
 
 /* Inline busy bar at the top of the repository details panel */

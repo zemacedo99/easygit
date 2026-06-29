@@ -572,7 +572,13 @@ function getRepoPath(id) {
 }
 
 /** Default user preferences, merged with any saved values. */
-const DEFAULT_SETTINGS = { showAdvanced: false, showBranch: false };
+const DEFAULT_SETTINGS = {
+  showAdvanced: false,
+  showBranch: false,
+  sortBy: 'attention',
+  theme: 'dark', // 'dark' | 'light'
+  fontSize: 'normal', // 'normal' | 'large' | 'larger'
+};
 
 /** Load user preferences (simple/advanced mode, branch details). */
 function getSettings() {

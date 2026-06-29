@@ -91,6 +91,17 @@ npm start       # launches EasyGit
 npm run dev     # same, but with developer tools open
 ```
 
+### Running the tests
+
+The pure logic modules (status interpretation, URL conversion, scanning helpers,
+Git error classification, commit-message suggestions, and the list sorting/
+filtering) have unit tests using Node's built-in test runner — no extra
+dependencies:
+
+```bash
+npm test
+```
+
 ### Build installable desktop apps
 
 EasyGit is packaged with [electron-builder](https://www.electron.build/), so end
@@ -206,6 +217,23 @@ Each repository shows one of these:
 | **Needs upload and download** | Both of the above. |
 | **Not connected to online repository** | This project isn't linked to an online repository. |
 | **Error** | Something went wrong (e.g. the folder was moved). |
+
+### Finding and organizing your projects
+
+When you have more than one project, a small search box and a **Sort** control
+appear above the list. You can search by name or folder, and sort by **Needs
+action first** (the default — projects that need your attention float to the
+top), **Name**, **Recently checked**, or **Order added**. Hover a project to
+rename it inline (this only changes the name shown in EasyGit). The sort choice
+is remembered.
+
+### Settings (the ⚙ button)
+
+Everything extra is optional and off by default, so the app stays simple:
+
+- **Show detailed save/upload steps** — turns on the advanced flow.
+- **Show version line details** — shows/switches branches.
+- **Appearance** — a **light theme** and a larger **text size** for readability.
 
 ---
 
