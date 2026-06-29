@@ -36,12 +36,13 @@ async function init() {
     /* ignore – non-fatal */
   }
 
-  // Load persisted preferences (simple/advanced mode, branch details).
+  // Load persisted preferences (simple/advanced mode, branch details, appearance).
   try {
     state.settings = await api.getSettings();
   } catch (e) {
     /* ignore – keep defaults */
   }
+  applyAppearance(state.settings);
 
   subscribeProgress();
   wireGlobalButtons();
@@ -398,8 +399,22 @@ function switchVersionLine(name) {
 function openSettings() {
   ui.showSettingsModal(state.settings, async (newSettings) => {
     state.settings = await api.setSettings(newSettings);
+    applyAppearance(state.settings);
     rerender();
   });
+}
+
+/** Map the font-size preference to a whole-UI zoom factor. */
+const FONT_ZOOM = { normal: 1, large: 1.15, larger: 1.3 };
+
+/**
+ * Apply appearance preferences (theme + font size). Both default to the
+ * original look, so the simple experience is unchanged unless the user opts in.
+ */
+function applyAppearance(settings) {
+  const theme = settings && settings.theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  if (api.setZoom) api.setZoom(FONT_ZOOM[(settings && settings.fontSize) || 'normal'] || 1);
 }
 
 /**

@@ -12,7 +12,7 @@
  * Keep this list minimal and intentional – it is the app's whole attack surface.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('easygit', {
   // Environment
@@ -70,6 +70,16 @@ contextBridge.exposeInMainWorld('easygit', {
   // Settings (persisted)
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
+
+  // Appearance: zoom the whole UI for the font-size option. Renderer-local
+  // (no IPC); scales fonts and layout uniformly, like the browser zoom.
+  setZoom: (factor) => {
+    try {
+      webFrame.setZoomFactor(factor);
+    } catch (e) {
+      /* ignore – non-fatal */
+    }
+  },
 
   // OS integrations
   pickFolder: (title) => ipcRenderer.invoke('dialog:pickFolder', title),

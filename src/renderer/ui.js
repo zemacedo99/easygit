@@ -1379,12 +1379,44 @@ export function showSettingsModal(settings, onChange) {
     ]);
   };
 
+  // A labelled dropdown setting (text on the left, choices on the right).
+  const choice = (key, title, desc, options, fallback) => {
+    const sel = h('select', { className: 'setting-select' });
+    const value = current[key] || fallback;
+    options.forEach(([val, label]) => {
+      const o = h('option', { value: val, text: label });
+      if (val === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+      current[key] = sel.value;
+      onChange({ ...current });
+    });
+    return h('label', { className: 'setting-row setting-row-choice' }, [
+      h('div', { className: 'setting-grow' }, [
+        h('div', { className: 'setting-title', text: title }),
+        h('div', { className: 'setting-desc', text: desc }),
+      ]),
+      sel,
+    ]);
+  };
+
   const close = openModal({
     title: 'Settings',
     subtitle: 'These preferences are remembered between launches.',
     body: h('div', { className: 'settings-list' }, [
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
+      h('div', { className: 'settings-section', text: 'Appearance' }),
+      choice('theme', 'Theme', 'Switch between the dark and light look.', [
+        ['dark', 'Dark'],
+        ['light', 'Light'],
+      ], 'dark'),
+      choice('fontSize', 'Text size', 'Make everything in EasyGit larger and easier to read.', [
+        ['normal', 'Normal'],
+        ['large', 'Large'],
+        ['larger', 'Larger'],
+      ], 'normal'),
     ]),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });
