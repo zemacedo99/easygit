@@ -260,6 +260,11 @@ window.easygit = {
     repos = repos.filter((r) => r.id !== id);
     return { ok: true };
   },
+  removeAllRepos: async () => {
+    const removed = repos.length;
+    repos = [];
+    return { ok: true, removed };
+  },
   renameRepo: async (id, name) => {
     const r = repos.find((x) => x.id === id);
     if (r) r.name = name;

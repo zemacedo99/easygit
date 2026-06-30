@@ -331,14 +331,44 @@ body {
   align-items: center;
   gap: 6px;
 }
-.repo-rename-btn {
+.repo-rename-btn,
+.repo-remove-btn {
   opacity: 0;
   font-size: 12px;
   transition: opacity 0.12s ease;
 }
 .repo-card:hover .repo-rename-btn,
-.repo-card:focus-within .repo-rename-btn {
+.repo-card:focus-within .repo-rename-btn,
+.repo-card:hover .repo-remove-btn,
+.repo-card:focus-within .repo-remove-btn {
   opacity: 1;
+}
+.repo-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--tone-error);
+}
+
+/* Subtle "Remove all" action in the list header (pushed to the right) */
+.btn-remove-all {
+  margin-left: auto;
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.btn-remove-all:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--tone-error);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.btn-remove-all[hidden] {
+  display: none;
 }
 
 /* Search + sort toolbar above the repository list */
@@ -347,6 +377,11 @@ body {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+}
+/* `display: flex` above would otherwise override the `hidden` attribute, so the
+   toolbar must be explicitly hidden when there are too few projects to need it. */
+.list-toolbar[hidden] {
+  display: none;
 }
 .list-search {
   flex: 1 1 auto;

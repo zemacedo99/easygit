@@ -61,10 +61,13 @@ function rerender() {
   // benefit from it, keeping the default experience uncluttered.
   const toolbar = document.getElementById('list-toolbar');
   if (toolbar) toolbar.hidden = state.repos.length < 2;
+  const removeAllBtn = document.getElementById('btn-remove-all');
+  if (removeAllBtn) removeAllBtn.hidden = state.repos.length === 0;
   ui.renderRepoList(shown, state.selectedId, selectRepo, state.checking, {
     total: state.repos.length,
     query: state.filter,
     onRename: renameRepoById,
+    onRemove: removeRepoById,
   });
   const repo = currentRepo();
   ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers(), state.settings);
@@ -109,6 +112,9 @@ function wireGlobalButtons() {
   document.getElementById('btn-scan').addEventListener('click', onScan);
   document.getElementById('btn-add').addEventListener('click', onAdd);
   document.getElementById('btn-check-all').addEventListener('click', onCheckAll);
+
+  const removeAllBtn = document.getElementById('btn-remove-all');
+  if (removeAllBtn) removeAllBtn.addEventListener('click', removeAll);
 
   // Repository list search + sort.
   const search = document.getElementById('repo-search');
@@ -216,6 +222,12 @@ async function onCheckAll() {
 function subscribeProgress() {
   api.onCheckProgress(({ id, done, total, result }) => {
     state.checking.delete(id);
+    // The repo may have been removed while the check was still running; ignore
+    // the late result instead of resurrecting stale details for a gone repo.
+    if (!state.repos.some((r) => r.id === id)) {
+      delete state.details[id];
+      return;
+    }
     if (result && result.ok) {
       replaceRepo(result.repo);
       state.details[id] = result.details;
@@ -242,9 +254,16 @@ function showGlobalProgress(done, total) {
 }
 
 function showGlobalSummary() {
+  const banner = document.getElementById('global-status');
   const text = document.getElementById('global-status-text');
   const track = document.getElementById('progress-track');
   track.hidden = true;
+
+  // If everything was removed while the check ran, there is nothing to summarise.
+  if (state.repos.length === 0) {
+    banner.hidden = true;
+    return;
+  }
 
   // Build a friendly summary by counting the (already friendly) status labels.
   const counts = {};
@@ -322,26 +341,78 @@ function detailHandlers() {
         }
       });
     },
-    onRemove: () => {
-      const repo = currentRepo();
-      if (!repo) return;
+    onRemove: () => { const r = currentRepo(); if (r) removeRepoById(r.id); },
+  };
+}
+
+/**
+ * Remove a single repository from EasyGit (after a friendly confirmation).
+ * Shared by the details panel and the left-list card. Never touches the folder
+ * on disk.
+ */
+function removeRepoById(id) {
+  const repo = state.repos.find((r) => r.id === id);
+  if (!repo) return;
+  ui.showConfirm(
+    {
+      title: 'Remove from EasyGit?',
+      message: `Remove “${repo.name}” from EasyGit? Your project folder will stay on your computer. You can add it again later.`,
+      confirmLabel: 'Remove',
+      danger: true,
+    },
+    async () => {
+      await api.removeRepo(repo.id);
+      if (state.selectedId === repo.id) state.selectedId = null;
+      delete state.details[repo.id];
+      await refreshRepos();
+      ui.showToast({ type: 'success', title: 'Removed', body: `${repo.name} was removed from EasyGit. Your folder is untouched.` });
+    }
+  );
+}
+
+/**
+ * Remove ALL repositories from EasyGit, behind a deliberate two-step
+ * confirmation (users understandably fear losing real files — they don't).
+ */
+function removeAll() {
+  if (state.repos.length === 0) return;
+  ui.showConfirm(
+    {
+      title: 'Remove all repositories from EasyGit?',
+      message:
+        'This will only remove them from EasyGit. Your project folders will stay on your computer. You can add them again later.',
+      confirmLabel: 'Continue',
+    },
+    () => {
       ui.showConfirm(
         {
-          title: 'Remove from EasyGit?',
-          message: `“${repo.name}” will be removed from EasyGit. The folder and its contents on your computer are NOT deleted.`,
-          confirmLabel: 'Remove',
+          title: 'Are you absolutely sure?',
+          message:
+            'Are you absolutely sure you want to remove all repositories from EasyGit? Your project folders will stay on your computer.',
+          confirmLabel: 'Yes, remove all',
           danger: true,
         },
         async () => {
-          await api.removeRepo(repo.id);
-          if (state.selectedId === repo.id) state.selectedId = null;
-          delete state.details[repo.id];
+          await api.removeAllRepos();
+          state.selectedId = null;
+          state.details = {};
+          state.checking.clear();
+          state.filter = '';
+          const search = document.getElementById('repo-search');
+          if (search) search.value = '';
+          // Clear any "Check if everything is updated" banner that may be running.
+          const banner = document.getElementById('global-status');
+          if (banner) banner.hidden = true;
           await refreshRepos();
-          ui.showToast({ type: 'success', title: 'Removed', body: `${repo.name} was removed from EasyGit.` });
+          ui.showToast({
+            type: 'success',
+            title: 'All removed',
+            body: 'All repositories were removed from EasyGit. Your folders are untouched.',
+          });
         }
       );
-    },
-  };
+    }
+  );
 }
 
 let mutating = false; // guards against overlapping git index writes (index.lock races)
@@ -511,6 +582,12 @@ async function checkRepo(id, fetch) {
   const res = await api.checkOne(id, { fetch });
 
   state.checking.delete(id);
+  // Removed while the check was in flight – don't recreate its details or toast.
+  if (!state.repos.some((r) => r.id === id)) {
+    delete state.details[id];
+    rerender();
+    return;
+  }
   if (res.ok) {
     replaceRepo(res.repo);
     state.details[id] = res.details;

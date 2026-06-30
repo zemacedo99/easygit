@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('easygit', {
   // Repository list
   listRepos: () => ipcRenderer.invoke('repos:list'),
   removeRepo: (id) => ipcRenderer.invoke('repos:remove', id),
+  removeAllRepos: () => ipcRenderer.invoke('repos:removeAll'),
   renameRepo: (id, name) => ipcRenderer.invoke('repos:rename', id, name),
 
   // Add
