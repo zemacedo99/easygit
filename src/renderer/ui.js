@@ -212,6 +212,23 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
         )
       );
     }
+    if (opts.onRemove) {
+      nameRow.push(
+        h(
+          'button',
+          {
+            className: 'icon-btn repo-remove-btn',
+            title: 'Remove from EasyGit — your project folder stays on your computer',
+            'aria-label': `Remove ${repo.name} from EasyGit (your folder stays on your computer)`,
+            onClick: (e) => {
+              e.stopPropagation(); // don't also select the card
+              opts.onRemove(repo.id);
+            },
+          },
+          '🗑️'
+        )
+      );
+    }
 
     const card = h(
       'div',
@@ -292,27 +309,18 @@ export function renderDetails(repo, details, handlers, settings) {
     : details.simpleExplanation || details.explanation;
   detailsEl.appendChild(h('div', { className: `explanation tone-${tone || 'neutral'}`, text: explanationText }));
 
-  // Not checked yet: offer a gentle first action and stop here.
+  // Not checked yet: still offer the safe management actions (open, rename,
+  // remove, open online if known) plus a primary "Check changes". The user
+  // should never have to check just to reach these.
   if (!details) {
-    detailsEl.appendChild(
-      h('div', { className: 'utility-row' }, [
-        actionButton('🔎', 'Check changes', () => handlers.onCheck(false), true),
-        actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
-      ])
-    );
+    detailsEl.appendChild(utilityRow(repo, null, handlers, 'first'));
     return;
   }
 
   // Repository unavailable (folder moved/deleted or no longer a Git repo):
   // show only the safe utilities, never a misleading empty flow.
   if (details.error || details.status === 'error') {
-    detailsEl.appendChild(
-      h('div', { className: 'utility-row' }, [
-        actionButton('🔄', 'Check again', () => handlers.onCheck(true), true),
-        actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
-        dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
-      ])
-    );
+    detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck-primary'));
     return;
   }
 
@@ -328,15 +336,35 @@ export function renderDetails(repo, details, handlers, settings) {
   );
 
   // Utility actions (always available and safe).
-  detailsEl.appendChild(
-    h('div', { className: 'utility-row' }, [
-      actionButton('🔄', 'Check again', () => handlers.onCheck(true)),
-      actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()),
-      details.browserUrl ? actionButton('🔗', 'Open online project', () => handlers.onOpenRemote()) : null,
-      actionButton('✏️', 'Rename', () => handlers.onRename()),
-      dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()),
-    ])
-  );
+  detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck'));
+}
+
+/**
+ * The repository-management actions that are always safe and available — even
+ * before a status check. "Open online project" appears only when the online
+ * address is already known (it is stored when the repo is added, so it works
+ * before any check). `mode` selects the leading check button:
+ *   'first'           → "Check changes" (primary, local check)
+ *   'recheck-primary' → "Check again"   (primary, used on the error screen)
+ *   'recheck'         → "Check again"   (secondary, alongside the normal flow)
+ */
+function utilityRow(repo, details, handlers, mode) {
+  // browserUrl is derived from the stored remoteUrl, so it is non-null exactly
+  // when onOpenRemote (which acts on remoteUrl) will succeed — safe to gate on.
+  const browserUrl = (details && details.browserUrl) || repo.browserUrl;
+  const buttons = [];
+  if (mode === 'first') {
+    buttons.push(actionButton('🔎', 'Check changes', () => handlers.onCheck(false), true));
+  } else if (mode === 'recheck-primary') {
+    buttons.push(actionButton('🔄', 'Check again', () => handlers.onCheck(true), true));
+  } else {
+    buttons.push(actionButton('🔄', 'Check again', () => handlers.onCheck(true)));
+  }
+  buttons.push(actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()));
+  if (browserUrl) buttons.push(actionButton('🔗', 'Open online project', () => handlers.onOpenRemote()));
+  buttons.push(actionButton('✏️', 'Rename', () => handlers.onRename()));
+  buttons.push(dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()));
+  return h('div', { className: 'utility-row' }, buttons);
 }
 
 /* ------------------------------------------------------------------ */

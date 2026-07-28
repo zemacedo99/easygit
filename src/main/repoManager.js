@@ -138,6 +138,18 @@ function removeRepo(id) {
   return { ok: false };
 }
 
+/**
+ * Remove ALL repositories from EasyGit's list. This only forgets them here; it
+ * never touches the folders on disk.
+ * @returns {{ok: boolean, removed: number}}
+ */
+function removeAllRepos() {
+  const removed = repos.length;
+  repos = [];
+  persist();
+  return { ok: true, removed };
+}
+
 /** Rename the friendly name of a repository. */
 function renameRepo(id, newName) {
   const repo = findById(id);
@@ -683,6 +695,7 @@ module.exports = {
   addRepo,
   addManyRepos,
   removeRepo,
+  removeAllRepos,
   renameRepo,
   scan,
   autoScan,
