@@ -1157,9 +1157,108 @@ export function showAutoScanModal(handlers) {
         option('⚡', 'Quick scan', 'Looks in your usual project and code folders. Fastest.', () => beginScan('quick', null)),
         option('🔎', 'Deeper scan', 'Also looks across Desktop, Documents and Downloads. Slower, finds more.', () => beginScan('deeper', null)),
         option('📁', 'Choose a folder…', 'Pick one folder and search the folders inside it.', chooseCustom),
+        h('div', { className: 'scan-divider', text: 'or' }),
+        option('🔗', 'Add repository from link or SSH', 'Paste an online project link and download it to this computer.', renderClone),
       ])
     );
     setFooter([h('button', { className: 'btn', onClick: close }, 'Cancel')]);
+  }
+
+  /* ---- Add from an online link (git clone) ---- */
+  function renderClone() {
+    setHeader('Add repository from link or SSH', 'Paste an online project link and choose where to save it.');
+
+    let parentDir = '';
+    let nameEdited = false; // did the user hand-edit the folder name?
+    let lastSuggestFor = ''; // guards against out-of-order suggestion responses
+
+    const linkInput = h('input', { className: 'input', type: 'text', placeholder: 'https://…, git@… or ssh://…', autocomplete: 'off', spellcheck: 'false' });
+    const parentInput = h('input', { className: 'input', type: 'text', readonly: 'readonly', placeholder: 'Choose a folder…' });
+    const nameInput = h('input', { className: 'input', type: 'text', placeholder: 'new-project', autocomplete: 'off', spellcheck: 'false' });
+    const statusEl = h('div', { className: 'clone-status', hidden: true });
+
+    const chooseBtn = h('button', {
+      className: 'btn',
+      onClick: async () => {
+        const dir = await handlers.pickParentFolder();
+        if (dir) { parentDir = dir; parentInput.value = dir; updateEnabled(); }
+      },
+    }, 'Choose folder');
+
+    function updateEnabled() {
+      downloadBtn.disabled = !(linkInput.value.trim() && parentDir);
+    }
+
+    // Suggest a folder name from the link, unless the user typed their own.
+    linkInput.addEventListener('input', async () => {
+      updateEnabled();
+      if (nameEdited) return;
+      const url = linkInput.value.trim();
+      lastSuggestFor = url;
+      if (!url) { nameInput.value = ''; return; }
+      try {
+        const suggested = await handlers.suggestFolderName(url);
+        if (!nameEdited && lastSuggestFor === url) nameInput.value = suggested || '';
+      } catch (e) { /* ignore */ }
+    });
+    nameInput.addEventListener('input', () => { nameEdited = true; });
+
+    function showStatus(kind, title, detail) {
+      statusEl.hidden = false;
+      statusEl.className = 'clone-status ' + (kind === 'error' ? 'is-error' : 'is-busy');
+      statusEl.textContent = '';
+      statusEl.appendChild(h('strong', { text: title }));
+      if (detail) statusEl.appendChild(h('div', { className: 'clone-status-detail', text: detail }));
+    }
+
+    const downloadBtn = h('button', { className: 'btn btn-primary' }, '⬇️ Download project');
+    downloadBtn.disabled = true;
+    downloadBtn.addEventListener('click', async () => {
+      const url = linkInput.value.trim();
+      if (!url || !parentDir) return;
+      downloadBtn.disabled = true;
+      chooseBtn.disabled = true;
+      downloadBtn.textContent = 'Downloading…';
+      showStatus('busy', 'Downloading the project…', 'This can take a moment for larger projects.');
+      let res;
+      try {
+        res = await handlers.cloneRepo({ url, parentDir, folderName: nameInput.value.trim() });
+      } catch (e) {
+        res = { ok: false, error: { title: 'Something went wrong', detail: 'The download could not be completed. Please try again.' } };
+      }
+      if (closed) return;
+      if (res && res.ok) {
+        if (handlers.onCloned) handlers.onCloned(res.repo);
+        close();
+        return;
+      }
+      chooseBtn.disabled = false;
+      downloadBtn.textContent = '⬇️ Download project';
+      updateEnabled();
+      const err = (res && res.error) || { title: 'Could not download', detail: 'Please check the link and try again.' };
+      showStatus('error', err.title, err.detail);
+    });
+
+    const field = (labelText, control) =>
+      h('div', { className: 'clone-field' }, [h('label', { className: 'clone-label', text: labelText }), control]);
+
+    setBody(
+      h('div', { className: 'clone-form' }, [
+        field('Online project link', linkInput),
+        field('Save inside', h('div', { className: 'clone-row' }, [parentInput, chooseBtn])),
+        field('Folder name', nameInput),
+        h('p', {
+          className: 'clone-note',
+          text: 'EasyGit will download the online project into the selected folder. Your existing Git/SSH/HTTPS sign-in will be used by Git — EasyGit never asks for or stores passwords.',
+        }),
+        statusEl,
+      ])
+    );
+    setFooter([
+      h('button', { className: 'btn', onClick: renderChoose }, 'Back'),
+      downloadBtn,
+    ]);
+    setTimeout(() => linkInput.focus(), 50);
   }
 
   async function chooseCustom() {

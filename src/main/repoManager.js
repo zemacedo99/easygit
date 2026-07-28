@@ -17,13 +17,14 @@
 
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 
 const git = require('./gitService');
 const storage = require('./storage');
 const scanner = require('./scanner');
 const interpreter = require('./statusInterpreter');
 const suggester = require('./suggestMessage');
-const { Status, STATUS_INFO, friendlyError } = require('./messages');
+const { Status, STATUS_INFO, friendlyError, friendlyCloneError } = require('./messages');
 const urls = require('./urls');
 
 /** In-memory cache of repositories, loaded from storage at startup. */
@@ -102,6 +103,112 @@ async function addRepo(folderPath) {
     name: path.basename(folderPath),
     path: path.resolve(folderPath),
     remoteUrl: remoteUrl || null,
+    lastStatus: Status.UNKNOWN,
+    lastChecked: null,
+  };
+  repos.push(repo);
+  persist();
+  return { ok: true, repo: decorate(repo) };
+}
+
+/** Suggest a friendly local folder name from a repository link (pure). */
+function suggestFolderName(url) {
+  return urls.suggestFolderName(url);
+}
+
+/**
+ * Download (git clone) an online project into a NEW local folder and add it to
+ * the list — the friendly "Add repository from link or SSH" action.
+ *
+ * Safety: never overwrites an existing folder; uses safe argument arrays (no
+ * shell); lets the installed Git handle authentication (no credentials stored
+ * or requested); cleans up a partial folder if the download fails.
+ *
+ * @param {{url?: string, parentDir?: string, folderName?: string}} options
+ * @returns {Promise<{ok: boolean, repo?: object, error?: {title: string, detail: string}}>}
+ */
+async function cloneRepo(options = {}) {
+  const url = String(options.url || '').trim();
+  const parentDir = String(options.parentDir || '').trim();
+
+  if (!url) {
+    return { ok: false, error: { title: 'Paste a link first', detail: 'Please paste the online project link you want to download.' } };
+  }
+  if (!urls.isProbablyGitUrl(url)) {
+    return {
+      ok: false,
+      error: {
+        title: 'That link does not look right',
+        detail: 'Please paste a full project link, for example https://…, git@… or ssh://…',
+      },
+    };
+  }
+  if (!parentDir) {
+    return { ok: false, error: { title: 'Choose where to save it', detail: 'Please choose a folder on this computer to save the project inside.' } };
+  }
+  let parentOk = false;
+  try {
+    parentOk = fs.statSync(parentDir).isDirectory();
+  } catch (e) {
+    parentOk = false;
+  }
+  if (!parentOk) {
+    return { ok: false, error: { title: 'Folder not found', detail: 'That destination folder could not be found. Please choose another one.' } };
+  }
+
+  // Folder name: use what the user typed, else suggest from the link.
+  let folderName = urls.sanitizeFolderName(options.folderName || '');
+  if (!folderName) folderName = urls.suggestFolderName(url);
+  if (!folderName) folderName = 'new-project';
+
+  const target = path.resolve(parentDir, folderName);
+
+  // Never overwrite an existing folder.
+  if (fs.existsSync(target)) {
+    return {
+      ok: false,
+      error: {
+        title: 'That folder already exists',
+        detail: `A folder named “${folderName}” already exists in that location. Please pick a different name or folder — EasyGit will not overwrite anything.`,
+      },
+    };
+  }
+
+  // Skip if this exact location is already in the list.
+  const norm = normalize(target);
+  if (repos.some((r) => normalize(r.path) === norm)) {
+    return { ok: false, error: { title: 'Already added', detail: 'This project is already in your list.' } };
+  }
+
+  const res = await git.clone(url, target, parentDir);
+  if (!res.ok) {
+    // Remove any partial folder Git may have created before failing.
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch (e) {
+      /* best-effort cleanup */
+    }
+    return { ok: false, error: friendlyCloneError(res.errorCode) };
+  }
+
+  // Confirm the download really produced a Git project.
+  const check = await git.isGitRepo(target);
+  if (!check.isRepo) {
+    return {
+      ok: false,
+      error: {
+        title: 'Download finished, but something looks off',
+        detail: 'The download completed but the folder does not look like a Git project. Please try again.',
+      },
+    };
+  }
+
+  const remoteUrl = await git.getRemoteUrl(target);
+  const repo = {
+    id: newId(),
+    name: folderName,
+    path: target,
+    remoteUrl: remoteUrl || url,
     lastStatus: Status.UNKNOWN,
     lastChecked: null,
   };
@@ -694,6 +801,8 @@ module.exports = {
   listRepos,
   addRepo,
   addManyRepos,
+  cloneRepo,
+  suggestFolderName,
   removeRepo,
   removeAllRepos,
   renameRepo,

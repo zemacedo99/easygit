@@ -11,6 +11,9 @@ complex one*. Everything below "Future ideas" is optional and not yet built.
 - [x] Choose and justify the tech stack (Electron + Node + plain HTML/CSS/JS).
 - [x] Clean project structure with clear separation of concerns.
 - [x] Manual "Add repository folder" with validation.
+- [x] **Add a repository from an online link or SSH** (guided download / `git clone`):
+      pick where to save it, edit the auto-suggested folder name, never overwrite
+      an existing folder, and let the installed Git handle sign-in.
 - [x] Persistent repository list (local JSON in the user data folder).
 - [x] Status check for a single repository.
 - [x] Status check for **all** repositories, running in the background with

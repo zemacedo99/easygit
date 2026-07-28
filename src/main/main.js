@@ -91,6 +91,8 @@ function registerIpcHandlers() {
   // --- Add (manual) --------------------------------------------------------
   ipcMain.handle('repos:add', async (_e, folderPath) => repoManager.addRepo(folderPath));
   ipcMain.handle('repos:addMany', async (_e, folderPaths) => repoManager.addManyRepos(folderPaths));
+  ipcMain.handle('repos:clone', async (_e, options) => repoManager.cloneRepo(options || {}));
+  ipcMain.handle('repos:suggestFolderName', async (_e, url) => repoManager.suggestFolderName(url));
 
   // --- Scan ----------------------------------------------------------------
   // Legacy single-folder scan (kept for compatibility).

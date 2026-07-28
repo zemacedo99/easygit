@@ -152,4 +152,41 @@ function friendlyError(errorCode, rawDetail = '') {
   }
 }
 
-module.exports = { Status, STATUS_INFO, friendlyError };
+/**
+ * Friendly wording for a failed "download from a link" (git clone). Never
+ * exposes raw Git output or any credential, and points at the likely causes.
+ * @param {string} errorCode  a GitErrorCode value
+ * @returns {{title: string, detail: string}}
+ */
+function friendlyCloneError(errorCode) {
+  switch (errorCode) {
+    case GitErrorCode.AUTH_FAILED:
+      return {
+        title: 'EasyGit could not sign in to that project',
+        detail:
+          'The online project did not accept your sign-in. Make sure you have access to it and that your Git sign-in (an SSH key or a saved login) is set up on this computer. EasyGit never asks for or stores passwords.',
+      };
+    case GitErrorCode.NETWORK_UNAVAILABLE:
+      return {
+        title: 'EasyGit could not reach that project',
+        detail:
+          'The online project could not be reached. Check your internet connection and that the link is correct, then try again.',
+      };
+    case GitErrorCode.GIT_NOT_INSTALLED:
+      return friendlyError(GitErrorCode.GIT_NOT_INSTALLED);
+    case GitErrorCode.TIMEOUT:
+      return {
+        title: 'That took too long',
+        detail:
+          'The download took too long and was stopped. The project may be very large or the connection slow. Please try again.',
+      };
+    default:
+      return {
+        title: 'EasyGit could not download that project',
+        detail:
+          'The project could not be downloaded. Common reasons: the link is slightly wrong, you do not have access, your Git sign-in (SSH key or saved login) is not set up on this computer, or there is a network problem. Please check the link and try again.',
+      };
+  }
+}
+
+module.exports = { Status, STATUS_INFO, friendlyError, friendlyCloneError };

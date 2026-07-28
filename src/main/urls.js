@@ -78,4 +78,56 @@ function providerName(remoteUrl) {
   }
 }
 
-module.exports = { toBrowserUrl, providerName };
+/**
+ * Does this look like a Git repository link we can clone? Accepts the common
+ * shapes: https://, http://, ssh://, git://, and scp-style user@host:path.
+ * @param {string|null} url
+ * @returns {boolean}
+ */
+function isProbablyGitUrl(url) {
+  const s = String(url || '').trim();
+  if (!s) return false;
+  if (/^(https?|ssh|git|ftps?|file):\/\/[^\s]+/i.test(s)) return true; // scheme://…
+  if (/^[^\s@:]+@[^\s@:]+:[^\s].*/.test(s)) return true; // scp-style: user@host:path
+  return false;
+}
+
+/**
+ * Make a string safe to use as a folder name on Windows (and elsewhere).
+ * Strips characters Windows forbids, trims trailing dots/spaces, and avoids
+ * reserved device names. Returns '' if nothing usable remains.
+ * @param {string} name
+ * @returns {string}
+ */
+function sanitizeFolderName(name) {
+  let n = String(name || '').replace(/[\\/]/g, ''); // no path separators
+  // eslint-disable-next-line no-control-regex
+  n = n.replace(/[<>:"|?*\x00-\x1F]/g, ''); // Windows-forbidden characters
+  n = n.replace(/\s+/g, ' ').trim();
+  n = n.replace(/[. ]+$/, ''); // Windows dislikes trailing dot/space
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(n)) n = `${n}-project`;
+  return n;
+}
+
+/**
+ * Suggest a local folder name from a repository link. Takes the last path
+ * segment and drops a trailing ".git". Falls back to "new-project".
+ *   https://host/team/easygit.git        -> easygit
+ *   git@host:team/easygit.git            -> easygit
+ *   ssh://git@host/team/project.git      -> project
+ * @param {string|null} remoteUrl
+ * @returns {string}
+ */
+function suggestFolderName(remoteUrl) {
+  let s = String(remoteUrl || '').trim();
+  if (!s) return 'new-project';
+  s = s.replace(/[?#].*$/, ''); // drop query/fragment
+  s = s.replace(/[/\\]+$/, ''); // drop trailing slashes
+  const parts = s.split(/[/\\:]+/).filter(Boolean);
+  let last = parts.length ? parts[parts.length - 1] : '';
+  last = last.replace(/\.git$/i, '');
+  const clean = sanitizeFolderName(last);
+  return clean || 'new-project';
+}
+
+module.exports = { toBrowserUrl, providerName, isProbablyGitUrl, sanitizeFolderName, suggestFolderName };

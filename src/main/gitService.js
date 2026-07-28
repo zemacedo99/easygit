@@ -69,8 +69,9 @@ function runGit(repoPath, args, options = {}) {
         windowsHide: true,
         maxBuffer: 10 * 1024 * 1024, // 10 MB – plenty for status/log output
         // Force English output so our text-matching for error classification is
-        // stable regardless of the user's system language.
-        env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+        // stable regardless of the user's system language. Callers may add extra
+        // env vars (e.g. GIT_TERMINAL_PROMPT) via options.env.
+        env: { ...process.env, LC_ALL: 'C', LANG: 'C', ...(options.env || {}) },
       },
       (error, stdout, stderr) => {
         const out = (stdout || '').toString();
@@ -514,6 +515,29 @@ async function pushSetUpstream(repoPath, branch) {
   return { ok: res.ok, errorCode: res.errorCode, stdout: res.stdout, stderr: res.stderr };
 }
 
+/**
+ * Clone an online repository into a NEW local folder.
+ *
+ * Runs via execFile with an argument array (never a shell string). The leading
+ * `--` stops a hostile URL that starts with `-` from being read as an option.
+ * GIT_TERMINAL_PROMPT=0 disables Git's interactive credential prompt, so a
+ * private repo without saved credentials fails fast instead of hanging — the
+ * user's existing SSH keys / credential helpers still work normally. EasyGit
+ * never asks for or stores credentials.
+ *
+ * @param {string} url         repository link (https / ssh / scp-style)
+ * @param {string} targetPath  absolute path of the NEW folder to create
+ * @param {string} [cwd]       working directory (the destination's parent)
+ * @returns {Promise<{ok: boolean, errorCode: string|null, stderr: string}>}
+ */
+async function clone(url, targetPath, cwd) {
+  const res = await runGit(cwd || process.cwd(), ['clone', '--', String(url), String(targetPath)], {
+    timeout: 10 * 60 * 1000, // clones can be large / slow
+    env: { GIT_TERMINAL_PROMPT: '0' },
+  });
+  return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
+}
+
 module.exports = {
   GitErrorCode,
   runGit,
@@ -540,6 +564,7 @@ module.exports = {
   pull,
   push,
   pushSetUpstream,
+  clone,
   // exposed for callers that want to name a folder
   basename: (p) => path.basename(p),
 };

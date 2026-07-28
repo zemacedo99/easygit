@@ -296,6 +296,28 @@ window.easygit = {
   },
   addManyRepos: async (paths) => ({ added: paths.map((p) => ({ name: p })), skipped: 0 }),
 
+  suggestFolderName: async (url) => {
+    let s = String(url || '').trim().replace(/[?#].*$/, '').replace(/[/\\]+$/, '');
+    if (!s) return 'new-project';
+    const parts = s.split(/[/\\:]+/).filter(Boolean);
+    const last = parts.length ? parts[parts.length - 1] : '';
+    return last.replace(/\.git$/i, '') || 'new-project';
+  },
+  cloneRepo: async ({ url, parentDir, folderName }) => {
+    const name = folderName || 'new-project';
+    const repo = {
+      id: 'cloned-' + (repos.length + 1),
+      name,
+      path: (parentDir || 'C:\\Git') + '\\' + name,
+      branch: 'main',
+      lastStatus: Status.UP_TO_DATE,
+      remoteUrl: url,
+      lastChecked: new Date().toISOString(),
+    };
+    repos.push(repo);
+    return { ok: true, repo: decorate(repo) };
+  },
+
   scan: async () => ({
     found: [
       { name: 'company-website', path: 'C:\\Users\\alex\\Dev\\company-website', alreadyAdded: true },

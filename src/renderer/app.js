@@ -170,6 +170,18 @@ function onScan() {
 
   ui.showAutoScanModal({
     pickFolder: () => api.pickFolder('Choose a folder to search inside'),
+
+    // "Add repository from link or SSH" (download an online project).
+    pickParentFolder: () => api.pickFolder('Choose where to save the project'),
+    suggestFolderName: (url) => api.suggestFolderName(url),
+    cloneRepo: (opts) => api.cloneRepo(opts),
+    onCloned: async (repo) => {
+      await refreshRepos();
+      selectRepo(repo.id);
+      ui.showToast({ type: 'success', title: 'Project downloaded', body: `${repo.name} was downloaded and added to EasyGit.` });
+      checkRepo(repo.id, false); // do an initial local status check, like other flows
+    },
+
     startScan: (preset, customPath, onProgress) => {
       // Subscribe to live progress for the duration of this scan only.
       const unsubscribe = api.onScanProgress(onProgress);

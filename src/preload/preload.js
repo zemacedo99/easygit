@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('easygit', {
   // Add
   addRepo: (folderPath) => ipcRenderer.invoke('repos:add', folderPath),
   addManyRepos: (folderPaths) => ipcRenderer.invoke('repos:addMany', folderPaths),
+  // Download an online project (git clone) into a new local folder, then add it.
+  cloneRepo: (options) => ipcRenderer.invoke('repos:clone', options),
+  suggestFolderName: (url) => ipcRenderer.invoke('repos:suggestFolderName', url),
 
   // Scan
   scan: (rootPath) => ipcRenderer.invoke('repos:scan', rootPath),

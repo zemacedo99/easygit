@@ -861,6 +861,43 @@ textarea.input {
   color: var(--text-dim);
   font-size: 13px;
 }
+/* "or" divider between scanning and the add-from-link option */
+.scan-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 2px 0;
+}
+.scan-divider::before,
+.scan-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Add from an online link (git clone) form */
+.clone-form { display: flex; flex-direction: column; gap: 16px; }
+.clone-field { display: flex; flex-direction: column; gap: 6px; }
+.clone-label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.clone-row { display: flex; gap: 10px; align-items: center; }
+.clone-row .input { flex: 1 1 auto; min-width: 0; }
+.clone-row .btn { flex: none; }
+.clone-note { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; margin: 0; }
+.clone-status {
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13.5px;
+}
+.clone-status[hidden] { display: none; }
+.clone-status.is-busy { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--text); }
+.clone-status.is-error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; }
+.clone-status-detail { margin-top: 4px; color: var(--text-dim); font-weight: 400; }
+:root[data-theme='light'] .clone-status.is-error { color: #b91c1c; }
 
 /* Auto-find: live progress */
 .scan-stats {

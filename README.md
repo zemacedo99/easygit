@@ -213,7 +213,7 @@ EasyGit releases are versioned with a Git tag (e.g. `v1.0.0`) and a committed
 
 | Button | What it does |
 | --- | --- |
-| **Auto-find Git repositories** | Searches the usual places on your computer for Git projects, with three choices: **Quick scan** (your usual project/code folders), **Deeper scan** (also Desktop, Documents and Downloads), or **Choose a folder…** (search inside one folder you pick). It shows live progress, can be stopped at any time, and lets you review and pick which projects to add. It never blindly scans your whole drive. |
+| **Auto-find Git repositories** | Searches the usual places on your computer for Git projects, with three choices: **Quick scan** (your usual project/code folders), **Deeper scan** (also Desktop, Documents and Downloads), or **Choose a folder…** (search inside one folder you pick). It shows live progress, can be stopped at any time, and lets you review and pick which projects to add. It never blindly scans your whole drive. It also offers **Add repository from link or SSH** — paste an online project link (`https://…`, `git@…`, or `ssh://…`), choose where to save it, and EasyGit downloads it to your computer and adds it. Your existing Git/SSH/HTTPS sign-in is used; EasyGit never asks for or stores passwords, and never overwrites an existing folder. |
 | **Add repository folder** | Pick one folder yourself. EasyGit checks it really is a repository before adding it. |
 | **Check if everything is updated** | Checks every repository in the background, refreshing online information, and shows a summary. The window stays responsive while it works. |
 
@@ -277,6 +277,7 @@ runs, so technical users (or curious ones) know precisely what happens.
 | Open online repository | Find the online address | `git remote get-url origin` (converted to a web link) |
 | Recent saved versions | Show recent history | `git log -n5 --pretty=...` |
 | Validate a folder | Confirm it's a repository | `git rev-parse --is-inside-work-tree` |
+| Add repository from link or SSH | Download an online project | `git clone -- <link> <folder>` (run with a safe argument array; interactive prompts disabled) |
 
 ### Friendly translations
 
