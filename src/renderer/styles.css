@@ -1272,3 +1272,16 @@ textarea.input {
   pointer-events: none;
   opacity: 0.55;
 }
+/* Keep counts and actions outside scrolling content. All files stay reachable. */
+.area-scroll { max-height: 360px; overflow: auto; min-width: 0; }
+.area-stash { margin-top: 16px; }
+.stash-entry { padding: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.inspection-body { max-height: 65vh; overflow: auto; }
+.inspection-files { max-height: 220px; overflow: auto; padding-left: 20px; }
+.inspection-files .btn { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.diff-scroll { max-height: 340px; overflow: auto; font: 12px/1.6 monospace; }
+.diff-line { display: flex; white-space: pre; min-width: max-content; }
+.diff-number { display: inline-block; min-width: 4em; text-align: right; padding-right: 1em; opacity: .7; user-select: none; }
+.diff-add { background: #17803d25; }
+.diff-remove { background: #dc262625; }
+.diff-context { padding: 6px; opacity: .7; }

@@ -15,6 +15,13 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('easygit', {
+  openCode: id => ipcRenderer.invoke('repos:openCode', id),
+  trashFile: (id, file) => ipcRenderer.invoke('repos:trashFile', id, file),
+  stashList: id => ipcRenderer.invoke('repos:stashList', id),
+  stashFiles: (id, oid) => ipcRenderer.invoke('repos:stashFiles', id, oid),
+  stashChange: (id, operation, value) => ipcRenderer.invoke('repos:stashChange', id, operation, value),
+  commitFiles: (id, oid) => ipcRenderer.invoke('repos:commitFiles', id, oid),
+  commitDiff: (id, oid, file, limit) => ipcRenderer.invoke('repos:commitDiff', id, oid, file, limit),
   // Environment
   checkGitInstalled: () => ipcRenderer.invoke('git:checkInstalled'),
   getStoragePath: () => ipcRenderer.invoke('app:storagePath'),

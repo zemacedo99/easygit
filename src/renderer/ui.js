@@ -337,6 +337,7 @@ export function renderDetails(repo, details, handlers, settings) {
 
   // Utility actions (always available and safe).
   detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck'));
+  if (opts.showAdvanced) detailsEl.appendChild(renderStashArea(handlers));
 }
 
 /**
@@ -361,6 +362,7 @@ function utilityRow(repo, details, handlers, mode) {
     buttons.push(actionButton('🔄', 'Check again', () => handlers.onCheck(true)));
   }
   buttons.push(actionButton('📂', 'Open project folder', () => handlers.onOpenFolder()));
+  if (handlers.onOpenCode) buttons.push(actionButton('↗', 'Open in VS Code', handlers.onOpenCode));
   if (browserUrl) buttons.push(actionButton('🔗', 'Open online project', () => handlers.onOpenRemote()));
   buttons.push(actionButton('✏️', 'Rename', () => handlers.onRename()));
   buttons.push(dangerButton('🗑️', 'Remove from EasyGit', () => handlers.onRemove()));
@@ -512,6 +514,10 @@ function fileRow(f, fromArea, handlers, checks, notify) {
     row.classList.add('dragging');
   });
   row.addEventListener('dragend', () => row.classList.remove('dragging'));
+  if (f.type !== 'deleted' && handlers.onTrash) row.appendChild(h('button', {
+    className: 'icon-btn', title: 'Move to Recycle Bin', 'aria-label': `Move ${f.path} to Recycle Bin`,
+    onClick: e => { e.stopPropagation(); handlers.onTrash(f.path); },
+  }, '🗑️'));
   return row;
 }
 
@@ -535,13 +541,14 @@ function conflictGroup(conflicted, handlers) {
 }
 
 /** A timeline of saved versions, newest first. */
-function renderTimeline(history) {
+function renderTimeline(history, handlers) {
   if (!history.length) return emptyNode('No saved versions yet.');
   return h('ul', { className: 'timeline' }, history.map((c, i) =>
     h('li', { className: 'timeline-item' + (i === 0 ? ' newest' : '') }, [
       h('span', { className: 'timeline-dot ' + (c.local ? 'is-local' : 'is-online') }),
       h('div', { className: 'timeline-body' }, [
         h('div', { className: 'tl-subject', text: c.subject }),
+        actionButton('🔎', 'View changes', () => showCommit(c, handlers)),
         h('div', { className: 'tl-meta', text: `${c.author ? c.author + ' · ' : ''}${c.when}${i === 0 ? ' · newest' : ''}` }),
         h('div', { className: 'tl-tags' }, [
           h('span', { className: 'tl-loc ' + (c.local ? 'loc-local' : 'loc-online'), text: c.local ? 'On this computer only' : 'Uploaded' }),
@@ -632,7 +639,7 @@ function buildArea({ key, icon, title, subtitle, count, countTone, dim, body, ac
   const dimmed = dim != null ? dim : count === 0;
   return h('div', { className: `flow-area area-${key}` + (dimmed ? ' is-empty' : '') }, [
     header,
-    body,
+    h('div', { className: 'area-scroll', tabindex: '0' }, [body]),
     actions && actions.length ? h('div', { className: 'area-actions' }, actions) : null,
   ]);
 }
@@ -712,7 +719,7 @@ function renderFlow(repo, details, handlers) {
   const area3 = buildArea({
     key: 'saved', icon: '💾', title: 'Saved on this computer',
     subtitle: 'Versions already saved here.',
-    count: history.length, dim: history.length === 0, body: renderTimeline(history), actions: a3Actions, handle: a3Handle,
+    count: history.length, dim: history.length === 0, body: renderTimeline(history, handlers), actions: a3Actions, handle: a3Handle,
   });
   makeDropZone(area3, ['staged-set'], () => handlers.onSaveVersion());
 
@@ -1534,6 +1541,7 @@ export function showSettingsModal(settings, onChange) {
     body: h('div', { className: 'settings-list' }, [
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
+      toggle('showVSCode', 'Show “Open in VS Code” button', 'Open this project in your installed Visual Studio Code editor.'),
       h('div', { className: 'settings-section', text: 'Appearance' }),
       choice('theme', 'Theme', 'Switch between the dark and light look.', [
         ['dark', 'Dark'],
@@ -1554,6 +1562,99 @@ export function showSettingsModal(settings, onChange) {
  * @param {string} currentName
  * @param {(name: string) => void} onRename
  */
+export function confirmTrash(file, onConfirm) {
+  showConfirm({ title: `Move “${file}” to the Recycle Bin?`, message: 'This changes the actual file on your computer, not just EasyGit.', confirmLabel: 'Continue', danger: true }, () => {
+    showConfirm({ title: 'Are you sure?', message: `“${file}” will be removed from this project and moved to the Recycle Bin.`, confirmLabel: 'Yes, move it', danger: true }, onConfirm);
+  });
+}
+
+// Stack and history requests start only after an explicit expansion. Every
+// callback retains its repository's handlers, even if selection changes.
+function renderStashArea(handlers) {
+  const body = h('div', {}, [emptyNode('Keep unfinished work here temporarily. Newest entries appear first.')]);
+  const load = async () => {
+    const result = await handlers.onStashList();
+    body.replaceChildren();
+    if (!result.ok) { body.appendChild(emptyNode(result.error.detail)); return; }
+    body.appendChild(h('p', { text: `${result.entries.length} entries · newest first` }));
+    if (!result.entries.length) body.appendChild(emptyNode('No work set aside.'));
+    for (const entry of result.entries) {
+      const files = h('div');
+      const expand = actionButton('▸', 'Show files', async () => {
+        if (files.childNodes.length) { files.replaceChildren(); return; }
+        const result = await handlers.onStashFiles(entry.oid);
+        files.appendChild(result.ok ? changedFileList(result.files) : emptyNode(result.error.detail));
+      });
+      body.appendChild(h('section', { className: 'stash-entry' }, [
+        h('strong', { text: entry.subject }), h('p', { className: 'tl-meta', text: new Date(entry.when).toLocaleString() }), expand,
+        actionButton('↩', 'Restore changes', () => showConfirm({ title: 'Restore this work?', message: 'Your current changes must be saved or set aside first. After a successful restore, this entry leaves the stack.', confirmLabel: 'Restore changes' }, async () => { await handlers.onStashChange('pop', entry.oid); })), files,
+      ]));
+    }
+  };
+  return buildArea({ key: 'stash', icon: '📚', title: 'Set aside for later', subtitle: 'Git stash · temporary work, not a backup', count: null, body, actions: [
+    actionButton('▤', 'Show / refresh stack', load),
+    actionButton('+', 'Set changes aside', () => {
+      const input = h('input', { className: 'input', maxlength: '500', placeholder: 'Optional description', 'aria-label': 'Description of work set aside' });
+      const close = openModal({ title: 'Set changes aside', subtitle: 'All changed files, including Ready to save and new files, will be set aside. Ignored files stay here. This uses Git stash.', body: input, footer: [
+        h('button', { className: 'btn', onClick: () => close() }, 'Cancel'),
+        actionButton('📚', 'Set changes aside', async () => { const description = input.value; close(); await handlers.onStashChange('push', description); }, true),
+      ] });
+    }),
+  ] });
+}
+
+function changedFileList(files, select) {
+  return h('div', {}, [h('p', { text: `${files.length} file${files.length === 1 ? '' : 's'} changed` }), h('ul', { className: 'inspection-files' }, files.map(file => {
+    const label = `${changeTypeInfo(file.type).label} · ${file.orig ? file.orig + ' → ' : ''}${file.path}`;
+    return h('li', {}, [select ? actionButton('', label, () => select(file)) : h('span', { text: label })]);
+  }))]);
+}
+
+async function showCommit(commit, handlers) {
+  const body = h('div', { className: 'inspection-body' }, [emptyNode('Loading changed files…')]);
+  const close = openModal({ title: commit.subject, subtitle: 'Saved version · read-only changes', body, footer: [h('button', { className: 'btn', onClick: () => close() }, 'Close')] });
+  const result = await handlers.onCommitFiles(commit.full);
+  if (!body.isConnected) return;
+  body.replaceChildren();
+  if (!result.ok) { body.appendChild(emptyNode(result.error.detail)); return; }
+  const diff = h('div', { className: 'diff-panel' });
+  let request = 0;
+  const select = async (file, limit = 600) => {
+    const current = ++request;
+    diff.replaceChildren(emptyNode('Loading changes…'));
+    const result = await handlers.onCommitDiff(commit.full, file.path, limit);
+    if (!body.isConnected || request !== current) return;
+    diff.replaceChildren(h('h3', { text: file.path }));
+    if (!result.ok) { diff.appendChild(emptyNode(result.error.detail)); return; }
+    if (result.binary) { diff.appendChild(emptyNode('This file changed, but it cannot be displayed as text.')); return; }
+    diff.appendChild(renderDiff(result.text));
+    if (!result.text.trim()) diff.appendChild(emptyNode('No text changes to display (for example, a rename or permission change).'));
+    if (result.truncated) {
+      diff.appendChild(emptyNode(`Showing the first ${result.limit} lines.`));
+      if (result.limit < 10000) diff.appendChild(actionButton('+', 'Load more', () => select(file, result.limit + 1000)));
+      else diff.appendChild(emptyNode('Display limit reached. Inspect the rest in your editor.'));
+    }
+  };
+  body.append(changedFileList(result.files, select), diff);
+}
+
+function renderDiff(text) {
+  let oldLine = 0, newLine = 0;
+  const rows = [];
+  for (const line of text.split('\n')) {
+    const range = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (range) { oldLine = Number(range[1]); newLine = Number(range[2]); rows.push(h('div', { className: 'diff-context', text: 'Changed section' })); continue; }
+    if (!oldLine && !newLine) continue; // Do not make raw Git headers the UI.
+    let oldNumber = '', newNumber = '', tone = '';
+    if (line.startsWith('+')) { tone = 'diff-add'; newNumber = newLine++; }
+    else if (line.startsWith('-')) { tone = 'diff-remove'; oldNumber = oldLine++; }
+    else if (line.startsWith(' ')) { oldNumber = oldLine++; newNumber = newLine++; }
+    else continue;
+    rows.push(h('div', { className: `diff-line ${tone}` }, [h('span', { className: 'diff-number', text: String(oldNumber) }), h('span', { className: 'diff-number', text: String(newNumber) }), h('code', { text: line })]));
+  }
+  return h('div', { className: 'diff-scroll', tabindex: '0', 'aria-label': 'Read-only changes: old and new line numbers' }, rows);
+}
+
 export function showRenameModal(currentName, onRename) {
   const input = h('input', { className: 'input', type: 'text', value: currentName });
   const close = openModal({

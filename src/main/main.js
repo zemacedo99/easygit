@@ -24,6 +24,7 @@ const storage = require('./storage');
 const repoManager = require('./repoManager');
 const git = require('./gitService');
 const urls = require('./urls');
+const projectTools = require('./projectTools');
 
 let mainWindow = null;
 
@@ -78,6 +79,19 @@ app.on('window-all-closed', () => {
  * its result straight back to the renderer.
  */
 function registerIpcHandlers() {
+  const projectAction = (channel, action) => ipcMain.handle(channel, async (_event, id, ...args) => {
+    const root = repoManager.getRepoPath(id);
+    if (!root) return { ok: false, error: { title: 'Project unavailable', detail: 'Add or select this project again.' } };
+    try { return await action(root, ...args); }
+    catch { return { ok: false, error: { title: 'Action unavailable', detail: 'Check the project and try again.' } }; }
+  });
+  projectAction('repos:openCode', root => projectTools.openCode(root));
+  projectAction('repos:trashFile', (root, file) => projectTools.trashFile(root, file, target => shell.trashItem(target)));
+  projectAction('repos:stashList', git.stashList);
+  projectAction('repos:stashFiles', git.stashFiles);
+  projectAction('repos:stashChange', git.stashChange);
+  projectAction('repos:commitFiles', git.commitFiles);
+  projectAction('repos:commitDiff', git.commitDiff);
   // --- Environment ---------------------------------------------------------
   ipcMain.handle('git:checkInstalled', async () => git.checkGitInstalled());
   ipcMain.handle('app:storagePath', async () => repoManager.getStoragePath());

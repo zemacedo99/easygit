@@ -692,6 +692,7 @@ function getRepoPath(id) {
 
 /** Default user preferences, merged with any saved values. */
 const DEFAULT_SETTINGS = {
+  showVSCode: true,
   showAdvanced: false,
   showBranch: false,
   sortBy: 'attention',

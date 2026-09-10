@@ -41,6 +41,46 @@ not.
 
 ---
 
+## Optional project tools (development version)
+
+These additions are in the source checkout; the v1.2.0 downloads below are unchanged.
+
+- **Open in VS Code** opens the project with your installed editor, even before
+  checking changes. Hide it with Settings → Show “Open in VS Code” button.
+  Windows uses the executable alongside the `code` command or a standard VS Code
+  installation folder. Nothing is installed automatically and no shell is opened.
+- Enable **Show detailed save/upload steps** for **Set aside for later** (Git stash).
+  “Set changes aside” includes all tracked changes, staged changes and new files;
+  ignored files stay in place. Add an optional description. Show/refresh the stack
+  to see newest entries first, then expand an entry to inspect its files.
+  “Restore changes” takes the selected entry out of the stack after success,
+  preserving the Ready to save selection where possible. Save or set aside current
+  changes before restoring. A failed restore keeps the entry and may leave files
+  needing attention; resolve them in your editor. EasyGit never resolves conflicts
+  automatically. Avoid changing the stack in another Git tool during these actions.
+- In Detailed mode, local file rows offer **Move to Recycle Bin**, protected by
+  two confirmations. This affects the actual file, unlike “Remove from EasyGit”.
+  It never uses permanent deletion or `git rm`. Linked files/folders, directories,
+  Git metadata and paths outside the project are refused. Restore a recycled file
+  through your operating system if needed.
+- **View changes** on a saved version opens its changed files, then a read-only
+  line-numbered diff. Merge commits are compared with their first parent. Binary
+  files show an explanation. Diffs start at 600 lines; “Load more” extends to a
+  10,000-line display limit. Output over 2 MiB is left to your editor.
+- File areas scroll after 360 pixels while headers/counts stay visible. No files
+  are omitted; commit and stack file lists and diffs also scroll.
+
+Simple mode keeps its existing computer ⇄ online flow. Stack, file removal and
+diff controls are only available in Detailed mode. A stack is temporary storage,
+not an online backup. No new release or automatic update is involved.
+
+Developer verification: `npm test` includes offline temporary-repository tests.
+On a Windows desktop, run
+`./node_modules/.bin/electron.cmd scripts/verify-detailed-ui.js` for the real-app
+UI harness. It uses an isolated temporary profile and 250 disposable files,
+recycles one test file, and leaves its temporary profile/screenshot path in the
+output for inspection. It never uses your saved projects.
+
 ## Download the latest version
 
 **Latest release: v1.2.0.** Pick a download below, then follow
@@ -356,7 +396,7 @@ EasyGit is intentionally a simple, safe MVP. It does **not** (yet):
 - Resolve merge conflicts. If a download causes a conflict, EasyGit tells you a
   person needs to help and changes nothing automatically.
 - Handle multiple branches / switching "version lines".
-- Support stashing, rebasing, resetting, force-pushing, or deleting branches.
+- Support rebasing, resetting, force-pushing, or deleting branches.
 - Handle Git submodules.
 - Manage sign-in credentials. It relies on Git's existing credential setup on
   your machine (e.g. a credential manager or SSH key).

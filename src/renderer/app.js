@@ -293,7 +293,27 @@ function showGlobalSummary() {
 /* ------------------------------------------------------------------ */
 
 function detailHandlers() {
+  const selected = currentRepo();
+  const report = res => {
+    if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
+    else if (res.message) ui.showToast({ type: 'success', title: 'Project updated', body: res.message });
+    return res;
+  };
+  const change = async fn => {
+    if (!selected) return;
+    const result = await withBusy('Updating your project…', fn);
+    report(result);
+    await checkRepo(selected.id, false);
+    return result;
+  };
   return {
+    onOpenCode: state.settings.showVSCode !== false ? async () => report(await api.openCode(selected.id)) : null,
+    onTrash: file => ui.confirmTrash(file, () => change(() => api.trashFile(selected.id, file))),
+    onStashList: () => api.stashList(selected.id),
+    onStashFiles: oid => api.stashFiles(selected.id, oid),
+    onStashChange: (operation, value) => change(() => api.stashChange(selected.id, operation, value)),
+    onCommitFiles: oid => api.commitFiles(selected.id, oid),
+    onCommitDiff: (oid, file, limit) => api.commitDiff(selected.id, oid, file, limit),
     // Return the promises so the clicked button can show a spinner while the
     // (long) action runs. Modal-openers below intentionally return nothing.
     onCheck: (fetch) => { const r = currentRepo(); if (r) return doCheck(r.id, !!fetch); },

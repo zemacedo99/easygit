@@ -251,7 +251,17 @@ const SCAN_STEPS = [
 
 // --- the API the renderer talks to ----------------------------------------
 
+const realProjectOnly = async () => ({ ok: false, error: {
+  title: 'Use a real project', detail: 'This screenshot demo does not change files or open an editor. Use the isolated detailed UI harness to test these actions.',
+} });
 window.easygit = {
+  openCode: realProjectOnly,
+  trashFile: realProjectOnly,
+  stashList: async () => ({ ok: true, entries: [] }),
+  stashFiles: realProjectOnly,
+  stashChange: realProjectOnly,
+  commitFiles: realProjectOnly,
+  commitDiff: realProjectOnly,
   checkGitInstalled: async () => ({ installed: true, version: 'git version 2.33.0' }),
   getStoragePath: async () => 'C:\\Users\\alex\\AppData\\Roaming\\easygit\\repositories.json',
 
