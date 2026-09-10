@@ -67,7 +67,7 @@ function runGit(repoPath, args, options = {}) {
         cwd: repoPath,
         timeout,
         windowsHide: true,
-        maxBuffer: 10 * 1024 * 1024, // 10 MB – plenty for status/log output
+        maxBuffer: options.maxBuffer || 10 * 1024 * 1024,
         // Force English output so our text-matching for error classification is
         // stable regardless of the user's system language. Callers may add extra
         // env vars (e.g. GIT_TERMINAL_PROMPT) via options.env.
@@ -538,7 +538,103 @@ async function clone(url, targetPath, cwd) {
   return { ok: res.ok, errorCode: res.errorCode, stderr: res.stderr };
 }
 
+// Detailed-mode queries are lazy. Accept full object IDs only, never revision
+// expressions or command options supplied by the renderer.
+const validOid = value => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
+const detailError = detail => ({ ok: false, error: { title: 'Could not complete this action', detail } });
+
+function parseChangedFiles(output) {
+  const tokens = output.split('\0');
+  const files = [];
+  for (let i = 0; i < tokens.length;) {
+    const status = tokens[i++];
+    if (!status) continue;
+    const first = tokens[i++];
+    const renamed = /^[RC]/.test(status);
+    const next = renamed ? tokens[i++] : first;
+    if (next) files.push({ path: next, type: mapStatusCode(status[0]), ...(renamed ? { orig: first } : {}) });
+  }
+  return files;
+}
+
+async function commitFiles(root, oid) {
+  if (!validOid(oid)) return detailError('Choose a saved version from the list.');
+  const result = await runGit(root, ['show', '--format=', '--no-ext-diff', '--no-textconv', '--name-status', '--diff-merges=first-parent', '-M', '-z', oid, '--']);
+  if (!result.ok) return detailError('The changed-file list could not be read. Try checking this project again.');
+  // Inspect merge commits relative to their first parent, matching the viewer.
+  return { ok: true, files: [...new Map(parseChangedFiles(result.stdout).map(f => [f.path, f])).values()] };
+}
+
+async function commitDiff(root, oid, file, requestedLimit = 600) {
+  if (!validOid(oid) || typeof file !== 'string' || file.includes('\0')) return detailError('Choose a file from a saved version.');
+  const changed = await commitFiles(root, oid);
+  if (!changed.ok) return changed;
+  const entry = changed.files.find(f => f.path === file);
+  if (!entry) return detailError('This file is not part of that saved version.');
+  const parents = await runGit(root, ['rev-list', '--parents', '-n', '1', oid, '--']);
+  if (!parents.ok) return detailError('This saved version could not be read.');
+  const parent = parents.stdout.trim().split(/\s+/)[1];
+  if (parent && !validOid(parent)) return detailError('This saved version could not be read.');
+  // Compare trees explicitly: path-filtered git show can simplify a merge away.
+  const command = parent ? ['diff'] : ['show', '--format='];
+  const revisions = parent ? [parent, oid] : [oid];
+  const result = await runGit(root, ['--literal-pathspecs', ...command, '--patch', '--no-ext-diff', '--no-textconv',
+    '--no-color', '--unified=3', '-M', ...revisions, '--', ...new Set([entry.orig, file].filter(Boolean))], { maxBuffer: 2 * 1024 * 1024 });
+  if (!result.ok) return detailError('This diff is too large or could not be read. Open the project in your editor to inspect it.');
+  const binary = /^(Binary files .* differ|GIT binary patch)$/m.test(result.stdout);
+  const limit = Math.min(10000, Math.max(100, Number(requestedLimit) || 600));
+  const lines = result.stdout.split('\n');
+  return { ok: true, binary, text: binary ? '' : lines.slice(0, limit).join('\n'), truncated: !binary && lines.length > limit, limit };
+}
+
+async function stashList(root) {
+  const result = await runGit(root, ['stash', 'list', '--format=%H%x00%gd%x00%cI%x00%gs']);
+  if (!result.ok) return detailError('The work set aside could not be read.');
+  return { ok: true, entries: result.stdout.split('\n').filter(Boolean).map(line => {
+    const [oid, ref, when, ...subject] = line.replace(/\r$/, '').split('\0');
+    return { oid, ref, when, subject: subject.join(' ') };
+  }) };
+}
+
+async function stashFiles(root, oid) {
+  if (!validOid(oid)) return detailError('Choose work from the stack.');
+  const list = await stashList(root);
+  if (!list.ok || !list.entries.some(e => e.oid === oid)) return detailError('The stack changed. Refresh it and choose again.');
+  const result = await runGit(root, ['stash', 'show', '--include-untracked', '--name-status', '-z', oid]);
+  return result.ok ? { ok: true, files: parseChangedFiles(result.stdout) } : detailError('The files in this entry could not be read.');
+}
+
+// Serialize stack operations from EasyGit. Entries are identified by object ID
+// and resolved to their current stack reference immediately before pop.
+const stashLocks = new Set();
+async function stashChange(root, operation, value) {
+  if (stashLocks.has(root)) return detailError('Another stack action is running. Please wait.');
+  stashLocks.add(root);
+  try {
+    const status = await getDetailedStatus(root);
+    if (!status.ok || status.conflicted.length) return detailError('Some files need attention. Resolve them before changing the stack.');
+    let args;
+    if (operation === 'push') {
+      if (!status.working.length && !status.staged.length) return detailError('There are no changes to set aside.');
+      if (typeof value !== 'string' || value.length > 500 || value.includes('\0')) return detailError('Use a short description for this work.');
+      args = ['stash', 'push', '--include-untracked', '-m', value.trim() || 'Work set aside in EasyGit'];
+    } else if (operation === 'pop' && validOid(value)) {
+      if (status.working.length || status.staged.length) return detailError('Save or set aside your current changes before restoring this work.');
+      const list = await stashList(root);
+      const entry = list.ok && list.entries.find(e => e.oid === value);
+      if (!entry || !/^stash@\{\d+\}$/.test(entry.ref)) return detailError('The stack changed. Refresh it and choose again.');
+      args = ['stash', 'pop', '--index', entry.ref];
+    } else return detailError('Choose a valid stack action.');
+    const result = await runGit(root, args);
+    if (!result.ok) return detailError(operation === 'pop'
+      ? 'Some files could not be restored automatically. The stack entry is kept. Check the files needing attention; EasyGit will not resolve or delete anything automatically.'
+      : 'The changes could not be set aside. Check the project before trying again.');
+    return { ok: true, message: operation === 'pop' ? 'Changes restored. The entry was removed from the stack.' : 'Changes set aside, including new files. Ignored files stay here.' };
+  } finally { stashLocks.delete(root); }
+}
+
 module.exports = {
+  commitFiles, commitDiff, stashList, stashFiles, stashChange, parseChangedFiles,
   GitErrorCode,
   runGit,
   classifyError,
