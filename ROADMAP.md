@@ -47,6 +47,11 @@ complex one*. Everything below "Future ideas" is optional and not yet built.
       checked, Order added — persisted in settings).
 - [x] **Light theme** and text-size option for accessibility (both off by
       default, in Settings → Appearance).
+- [x] Optional **list organization** (off by default, Settings → Organize your
+      repository list): drag-and-drop custom order, one level of collapsible
+      EasyGit-only groups (create/rename/delete/reorder, move projects), and
+      reviewable group suggestions from shared parent folders. A "Custom order"
+      sort preserves the arrangement, and no folders on disk are ever touched.
 - [ ] Remember the **last scanned folder** and offer common shortcuts
       (Desktop, Documents, a Development folder). *(Scan roots are already
       persisted; surfacing them as shortcuts is still to do.)*
@@ -111,7 +116,9 @@ before being added:
 
 - [x] Unit tests for the pure logic modules (`statusInterpreter`, `urls`,
       `scanner`, error classification in `gitService`, plus `suggestMessage`,
-      `messages`, and the list `repoSort` helper). Run with `npm test`.
+      `messages`, the list `repoSort` helper and the `repoLayout` organization
+      model). Run with `npm test`.
 - [x] Integration tests against temporary Git repositories for cloning, stash and
-      history/diffs; OS integration safety tests and an isolated Electron UI harness.
+      history/diffs; OS integration safety tests and isolated Electron UI harnesses
+      (`scripts/verify-detailed-ui.js`, `scripts/verify-organization-ui.js`).
 - [ ] Continuous integration to run the tests on each change.

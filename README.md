@@ -159,8 +159,8 @@ npm run dev     # same, but with developer tools open
 ### Running the tests
 
 The pure logic modules (status interpretation, URL conversion, scanning helpers,
-Git error classification, commit-message suggestions, and the list sorting/
-filtering) have unit tests using Node's built-in test runner — no extra
+Git error classification, commit-message suggestions, the list sorting/
+filtering, and the optional list organization model) have unit tests using Node's built-in test runner — no extra
 dependencies:
 
 ```bash
@@ -292,12 +292,49 @@ top), **Name**, **Recently checked**, or **Order added**. Hover a project to
 rename it inline (this only changes the name shown in EasyGit). The sort choice
 is remembered.
 
+#### Optional: your own order and groups
+
+If you prefer, you can organize the list yourself. Turn on **Settings → Organize
+your repository list** and then pick any of these options:
+
+- **Arrange projects in your own order** — drag projects up and down the list.
+- **Show projects in groups** — collapsible groups such as one per client, with
+  a project count on each group header.
+- **Create and edit your own groups** — **New group**, rename, delete and reorder
+  groups, and move projects between them by dragging or with the 📂 button on a
+  project.
+- **Suggest groups from project folders** — when two or more projects share the
+  same folder (for example `C:\Git\ACME\documentation` and
+  `C:\Git\ACME\management`), EasyGit offers a `ACME` group. Nothing
+  changes until you click **Create group**, and a suggestion you dismiss is not
+  shown again unless the projects in that folder change. Broad folders such as a
+  drive, your user folder, `Documents`, `Git` or `Projects` are never suggested.
+
+> **Groups only exist inside EasyGit.** They only change how this list looks.
+> No folder is ever created, moved or renamed on your computer. Deleting a group
+> keeps its projects in EasyGit under “Not in a group”.
+
+How it works with search and sorting:
+
+- Your arrangement shows under **Sort → Custom order** (which EasyGit picks for
+  you when you turn ordering or groups on). Other sorts, such as **Needs action
+  first**, sort projects *inside* each group. They never change your saved
+  arrangement, and choosing **Custom order** brings it back. Dragging is
+  available in Custom order.
+- Search always looks in every project, including ones in collapsed groups.
+  Matching groups open while you search, and groups without a match are hidden.
+- The count next to “Your repositories” always counts projects, not groups.
+- Turning the option off brings back the normal list and your previous sort. Your
+  order and groups are kept, so they come back when you turn it on again.
+
 ### Settings (the ⚙ button)
 
 Everything extra is optional and off by default, so the app stays simple:
 
 - **Show detailed save/upload steps** — turns on the advanced flow.
 - **Show version line details** — shows/switches branches.
+- **Organize your repository list** — your own order and EasyGit-only groups
+  (see above).
 - **Appearance** — a **light theme** and a larger **text size** for readability.
 
 ---
@@ -340,6 +377,10 @@ EasyGit remembers your list of repositories in a small JSON file inside your
 operating system's per-user app data folder (not inside any of your projects).
 For each repository it stores: the friendly name, the local folder path, the last
 known status, when it was last checked, and the online repository URL (if any).
+If you use the optional list organization, the same file also stores your
+custom order, group names, which project is in which group, collapsed groups and
+dismissed suggestions. This data refers to projects by EasyGit's internal id and
+never changes your folders. Files from older versions load unchanged.
 
 The path to this file is determined at runtime; EasyGit never writes into your
 project folders except when *you* click an action that does (Save / Download /
