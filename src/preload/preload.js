@@ -81,6 +81,9 @@ contextBridge.exposeInMainWorld('easygit', {
   // Settings (persisted)
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
+  // Optional list organization (custom order + groups) – EasyGit metadata only.
+  getLayout: () => ipcRenderer.invoke('layout:get'),
+  setLayout: (layout) => ipcRenderer.invoke('layout:set', layout),
 
   // Appearance: zoom the whole UI for the font-size option. Renderer-local
   // (no IPC); scales fonts and layout uniformly, like the browser zoom.

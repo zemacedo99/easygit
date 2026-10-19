@@ -16,6 +16,10 @@
  *   - remoteUrl    online repository URL, if known
  *   - lastStatus   last known status code (see statusInterpreter.js)
  *   - lastChecked  ISO timestamp of the last status check
+ *
+ * Optional `layout` (only used when "Organize your repository list" is on):
+ * custom order + EasyGit-only groups, keyed by repository id. Kept separate
+ * from the repositories themselves; it never refers to or changes real folders.
  */
 
 const fs = require('fs');
@@ -45,16 +49,17 @@ function ensureInitialized() {
 function readAll() {
   ensureInitialized();
   try {
-    if (!fs.existsSync(storageFilePath)) return { repositories: [], scanRoots: [], settings: {} };
+    if (!fs.existsSync(storageFilePath)) return { repositories: [], scanRoots: [], settings: {}, layout: null };
     const data = JSON.parse(fs.readFileSync(storageFilePath, 'utf8'));
     return {
       repositories: Array.isArray(data.repositories) ? data.repositories : [],
       scanRoots: Array.isArray(data.scanRoots) ? data.scanRoots : [],
       settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
+      layout: data.layout && typeof data.layout === 'object' ? data.layout : null,
     };
   } catch (e) {
     // Corrupted file – start clean rather than blocking the user.
-    return { repositories: [], scanRoots: [], settings: {} };
+    return { repositories: [], scanRoots: [], settings: {}, layout: null };
   }
 }
 
@@ -68,6 +73,8 @@ function writeAll(data) {
     scanRoots: data.scanRoots || [],
     settings: data.settings || {},
   };
+  // Only written once the user has organized something, so older files stay as they were.
+  if (data.layout) payload.layout = data.layout;
   const tmp = storageFilePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
   fs.renameSync(tmp, storageFilePath);
@@ -127,6 +134,24 @@ function saveSettings(settings) {
   writeAll(all);
 }
 
+/**
+ * Load the optional list organization (custom order + groups), or null.
+ * @returns {object|null}
+ */
+function loadLayout() {
+  return readAll().layout;
+}
+
+/**
+ * Persist the list organization, preserving everything else.
+ * @param {object|null} layout
+ */
+function saveLayout(layout) {
+  const all = readAll();
+  all.layout = layout;
+  writeAll(all);
+}
+
 /** Where the data file lives (handy for the UI / debugging). */
 function getStoragePath() {
   return storageFilePath;
@@ -140,5 +165,7 @@ module.exports = {
   saveScanRoots,
   loadSettings,
   saveSettings,
+  loadLayout,
+  saveLayout,
   getStoragePath,
 };

@@ -193,6 +193,9 @@ function registerIpcHandlers() {
   // --- Settings (simple/advanced mode, branch details) ---------------------
   ipcMain.handle('settings:get', async () => repoManager.getSettings());
   ipcMain.handle('settings:set', async (_e, partial) => repoManager.setSettings(partial));
+  // Optional list organization (custom order + EasyGit-only groups).
+  ipcMain.handle('layout:get', async () => repoManager.getLayout());
+  ipcMain.handle('layout:set', async (_e, layout) => repoManager.setLayout(layout));
 
   // Reveal a specific file in the system file explorer.
   ipcMain.handle('repos:revealFile', async (_e, id, relPath) => {

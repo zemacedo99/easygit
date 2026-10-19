@@ -240,6 +240,7 @@ function removeRepo(id) {
   repos = repos.filter((r) => r.id !== id);
   if (repos.length !== before) {
     persist();
+    pruneLayout();
     return { ok: true };
   }
   return { ok: false };
@@ -254,6 +255,7 @@ function removeAllRepos() {
   const removed = repos.length;
   repos = [];
   persist();
+  pruneLayout(); // groups stay (now empty) so the user's group names aren't lost
   return { ok: true, removed };
 }
 
@@ -696,6 +698,12 @@ const DEFAULT_SETTINGS = {
   showAdvanced: false,
   showBranch: false,
   sortBy: 'attention',
+  // Optional list organization – all OFF, so the list behaves exactly as before.
+  organizeRepos: false, // master switch
+  orgManualOrder: false, // drag projects into your own order
+  orgGroups: false, // show projects in collapsible groups (EasyGit-only)
+  orgCustomGroups: false, // create / rename / delete groups, move projects between them
+  orgSuggestGroups: false, // suggest groups from shared parent folders
   theme: 'dark', // 'dark' | 'light'
   fontSize: 'normal', // 'normal' | 'large' | 'larger'
 };
@@ -710,6 +718,56 @@ function setSettings(partial) {
   const merged = { ...getSettings(), ...(partial || {}) };
   storage.saveSettings(merged);
   return merged;
+}
+
+// ---------------------------------------------------------------------------
+// List organization (custom order + groups). Pure EasyGit metadata keyed by
+// repository id – it never touches folders on disk. The renderer owns the
+// model (repoLayout.mjs); here we only store it safely and drop removed repos.
+// ---------------------------------------------------------------------------
+
+const MAX_GROUPS = 200;
+
+/** Keep only the expected shape, with ids that still exist. */
+function sanitizeLayout(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const known = new Set(repos.map((r) => r.id));
+  const ids = (list) => (Array.isArray(list) ? list.filter((id) => typeof id === 'string' && known.has(id)) : []);
+  const groups = (Array.isArray(raw.groups) ? raw.groups : [])
+    .filter((g) => g && typeof g.id === 'string' && g.id)
+    .slice(0, MAX_GROUPS)
+    .map((g) => ({
+      id: g.id.slice(0, 80),
+      name: String(g.name == null ? '' : g.name).slice(0, 60),
+      collapsed: !!g.collapsed,
+      repoIds: ids(g.repoIds),
+    }));
+  return {
+    order: ids(raw.order),
+    groups,
+    ungroupedCollapsed: !!raw.ungroupedCollapsed,
+    dismissedSuggestions: (Array.isArray(raw.dismissedSuggestions) ? raw.dismissedSuggestions : [])
+      .filter((s) => typeof s === 'string')
+      .slice(-500),
+  };
+}
+
+/** The saved list organization, or null if the user never organized anything. */
+function getLayout() {
+  return sanitizeLayout(storage.loadLayout());
+}
+
+/** Save the list organization and return what was stored. */
+function setLayout(layout) {
+  const clean = sanitizeLayout(layout);
+  storage.saveLayout(clean);
+  return clean;
+}
+
+/** Forget removed repositories in the saved organization (if there is one). */
+function pruneLayout() {
+  const saved = storage.loadLayout();
+  if (saved) storage.saveLayout(sanitizeLayout(saved));
 }
 
 function notFound() {
@@ -824,5 +882,7 @@ module.exports = {
   getRepoPath,
   getSettings,
   setSettings,
+  getLayout,
+  setLayout,
   getStoragePath: storage.getStoragePath,
 };
