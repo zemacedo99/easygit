@@ -193,68 +193,91 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
     return;
   }
 
-  for (const repo of repos) {
-    const nameRow = [h('p', { className: 'repo-name', text: repo.name })];
-    if (opts.onRename) {
-      nameRow.push(
-        h(
-          'button',
-          {
-            className: 'icon-btn repo-rename-btn',
-            title: 'Rename this project',
-            'aria-label': `Rename ${repo.name}`,
-            onClick: (e) => {
-              e.stopPropagation(); // don't also select the card
-              opts.onRename(repo.id);
-            },
-          },
-          '✏️'
-        )
-      );
-    }
-    if (opts.onRemove) {
-      nameRow.push(
-        h(
-          'button',
-          {
-            className: 'icon-btn repo-remove-btn',
-            title: 'Remove from EasyGit — your project folder stays on your computer',
-            'aria-label': `Remove ${repo.name} from EasyGit (your folder stays on your computer)`,
-            onClick: (e) => {
-              e.stopPropagation(); // don't also select the card
-              opts.onRemove(repo.id);
-            },
-          },
-          '🗑️'
-        )
-      );
-    }
+  for (const repo of repos) listEl.appendChild(buildRepoCard(repo, selectedId, onSelect, checkingIds, opts));
+}
 
-    const card = h(
-      'div',
-      {
-        className: 'repo-card' + (repo.id === selectedId ? ' selected' : ''),
-        onClick: () => onSelect(repo.id),
-      },
-      [
-        h('div', { className: 'repo-card-top' }, [
-          h('div', { className: 'repo-card-id' }, [
-            h('div', { className: 'repo-name-row' }, nameRow),
-            h('p', { className: 'repo-path', text: repo.path }),
-          ]),
-          statusBadge(repo.statusTone, repo.statusLabel, checkingIds.has(repo.id)),
-        ]),
-        h('div', { className: 'repo-meta' }, [
-          h('span', {}, [
-            h('span', { className: 'meta-label', text: 'Current version line: ' }),
-            repo.branch || '—',
-          ]),
-          h('span', { text: formatLastChecked(repo.lastChecked) }),
-        ]),
-      ]
+/**
+ * One repository card for the left list (shared by the flat and grouped lists).
+ * opts.onMoveToGroup adds a "Move to group" button (only when custom groups are on).
+ */
+export function buildRepoCard(repo, selectedId, onSelect, checkingIds = new Set(), opts = {}) {
+  const nameRow = [h('p', { className: 'repo-name', text: repo.name })];
+  if (opts.onMoveToGroup) {
+    nameRow.push(
+      h(
+        'button',
+        {
+          className: 'icon-btn repo-group-btn',
+          title: 'Move to a group — only organizes this list, your folder is not moved',
+          'aria-label': `Move ${repo.name} to a group`,
+          onClick: (e) => {
+            e.stopPropagation(); // don't also select the card
+            opts.onMoveToGroup(repo.id);
+          },
+        },
+        '📂'
+      )
     );
-    listEl.appendChild(card);
   }
+  if (opts.onRename) {
+    nameRow.push(
+      h(
+        'button',
+        {
+          className: 'icon-btn repo-rename-btn',
+          title: 'Rename this project',
+          'aria-label': `Rename ${repo.name}`,
+          onClick: (e) => {
+            e.stopPropagation(); // don't also select the card
+            opts.onRename(repo.id);
+          },
+        },
+        '✏️'
+      )
+    );
+  }
+  if (opts.onRemove) {
+    nameRow.push(
+      h(
+        'button',
+        {
+          className: 'icon-btn repo-remove-btn',
+          title: 'Remove from EasyGit — your project folder stays on your computer',
+          'aria-label': `Remove ${repo.name} from EasyGit (your folder stays on your computer)`,
+          onClick: (e) => {
+            e.stopPropagation(); // don't also select the card
+            opts.onRemove(repo.id);
+          },
+        },
+        '🗑️'
+      )
+    );
+  }
+
+  const card = h(
+    'div',
+    {
+      className: 'repo-card' + (repo.id === selectedId ? ' selected' : ''),
+      onClick: () => onSelect(repo.id),
+    },
+    [
+      h('div', { className: 'repo-card-top' }, [
+        h('div', { className: 'repo-card-id' }, [
+          h('div', { className: 'repo-name-row' }, nameRow),
+          h('p', { className: 'repo-path', text: repo.path }),
+        ]),
+        statusBadge(repo.statusTone, repo.statusLabel, checkingIds.has(repo.id)),
+      ]),
+      h('div', { className: 'repo-meta' }, [
+        h('span', {}, [
+          h('span', { className: 'meta-label', text: 'Current version line: ' }),
+          repo.branch || '—',
+        ]),
+        h('span', { text: formatLastChecked(repo.lastChecked) }),
+      ]),
+    ]
+  );
+  return card;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1496,22 +1519,48 @@ export function hideHeaderBusy() {
  */
 export function showSettingsModal(settings, onChange) {
   const current = { ...settings };
+  const rows = {}; // key -> { row, cb }, used to show/enable the nested options
 
   const toggle = (key, title, desc) => {
     const cb = h('input', { type: 'checkbox', className: 'file-check' });
     if (current[key]) cb.checked = true;
     cb.addEventListener('change', () => {
       current[key] = cb.checked;
+      syncOrganization();
       onChange({ ...current });
     });
-    return h('label', { className: 'setting-row' }, [
+    const row = h('label', { className: 'setting-row' }, [
       cb,
       h('div', {}, [
         h('div', { className: 'setting-title', text: title }),
         h('div', { className: 'setting-desc', text: desc }),
       ]),
     ]);
+    rows[key] = { row, cb };
+    return row;
   };
+
+  // Repository organization: one master switch; its options only appear when
+  // it is on, so the default Settings (and list) stay exactly as simple as before.
+  const orgOptions = h('div', { className: 'settings-nested' }, [
+    toggle('orgManualOrder', 'Arrange projects in your own order', 'Drag projects up and down the list. Choose “Custom order” in Sort to see your arrangement.'),
+    toggle('orgGroups', 'Show projects in groups', 'Collapsible groups in the list, such as one per client. Groups exist only inside EasyGit — no folders are created or moved.'),
+    h('div', { className: 'settings-nested settings-nested-deep' }, [
+      toggle('orgCustomGroups', 'Create and edit your own groups', 'Add, rename, delete and reorder groups, and move projects between them.'),
+      toggle('orgSuggestGroups', 'Suggest groups from project folders', 'When several projects sit in the same folder (for example C:\\Git\\CLIENT\\…), offer a group for them. You review each suggestion first.'),
+    ]),
+  ]);
+  function syncOrganization() {
+    if (!rows.organizeRepos) return; // still building
+    orgOptions.hidden = !current.organizeRepos;
+    // Editing and suggestions only make sense while groups are shown.
+    for (const key of ['orgCustomGroups', 'orgSuggestGroups']) {
+      const off = !current.orgGroups;
+      rows[key].cb.disabled = off;
+      rows[key].row.classList.toggle('setting-disabled', off);
+      rows[key].row.title = off ? 'Turn on “Show projects in groups” first' : '';
+    }
+  }
 
   // A labelled dropdown setting (text on the left, choices on the right).
   const choice = (key, title, desc, options, fallback) => {
@@ -1542,6 +1591,9 @@ export function showSettingsModal(settings, onChange) {
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
       toggle('showVSCode', 'Show “Open in VS Code” button', 'Open this project in your installed Visual Studio Code editor.'),
+      h('div', { className: 'settings-section', text: 'Your repository list' }),
+      toggle('organizeRepos', 'Organize your repository list', 'Optional: your own order and groups for the list on the left. Only changes how EasyGit shows the list — your folders on disk are never moved or renamed.'),
+      orgOptions,
       h('div', { className: 'settings-section', text: 'Appearance' }),
       choice('theme', 'Theme', 'Switch between the dark and light look.', [
         ['dark', 'Dark'],
@@ -1555,6 +1607,7 @@ export function showSettingsModal(settings, onChange) {
     ]),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });
+  syncOrganization();
 }
 
 /**

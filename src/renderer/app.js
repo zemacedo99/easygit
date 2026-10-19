@@ -10,6 +10,8 @@
 
 import * as ui from './ui.js';
 import { sortAndFilterRepos } from './repoSort.mjs';
+import * as org from './repoLayout.mjs';
+import { renderOrganizedList, showGroupNameModal, showMoveToGroupModal, showSuggestionsModal } from './orgList.js';
 
 const api = window.easygit;
 
@@ -21,6 +23,10 @@ const state = {
   checking: new Set(),  // ids currently being checked (for the spinner badge)
   filter: '',           // current repo-list search text (not persisted)
   settings: { showAdvanced: false, showBranch: false, sortBy: 'attention' }, // persisted preferences
+  // Optional list organization (custom order + EasyGit-only groups). Loaded
+  // even while the feature is off so turning it back on restores everything.
+  savedLayout: null,    // as stored by the main process (null = never organized)
+  layout: org.emptyLayout(), // normalized against the current repositories
 };
 
 /* ------------------------------------------------------------------ */
@@ -43,6 +49,11 @@ async function init() {
     /* ignore – keep defaults */
   }
   applyAppearance(state.settings);
+  try {
+    state.savedLayout = await api.getLayout();
+  } catch (e) {
+    /* ignore – no organization */
+  }
 
   subscribeProgress();
   wireGlobalButtons();
@@ -56,21 +67,170 @@ async function refreshRepos() {
 }
 
 function rerender() {
-  const shown = sortAndFilterRepos(state.repos, state.filter, state.settings.sortBy);
+  // New, removed or renamed repositories are reconciled here (pure, not saved).
+  state.layout = org.normalizeLayout(state.savedLayout, state.repos);
+  const flags = org.orgFlags(state.settings);
+  const sortBy = org.effectiveSort(state.settings);
+  syncSortMenu(flags, sortBy);
   // The search/sort toolbar only appears once there are enough projects to
   // benefit from it, keeping the default experience uncluttered.
   const toolbar = document.getElementById('list-toolbar');
   if (toolbar) toolbar.hidden = state.repos.length < 2;
   const removeAllBtn = document.getElementById('btn-remove-all');
   if (removeAllBtn) removeAllBtn.hidden = state.repos.length === 0;
-  ui.renderRepoList(shown, state.selectedId, selectRepo, state.checking, {
-    total: state.repos.length,
-    query: state.filter,
-    onRename: renameRepoById,
-    onRemove: removeRepoById,
-  });
+  if (flags.manual || flags.groups) {
+    renderOrganized(flags, sortBy);
+  } else {
+    // Organization off (the default): exactly the original flat list.
+    const shown = sortAndFilterRepos(state.repos, state.filter, sortBy);
+    ui.renderRepoList(shown, state.selectedId, selectRepo, state.checking, {
+      total: state.repos.length,
+      query: state.filter,
+      onRename: renameRepoById,
+      onRemove: removeRepoById,
+    });
+  }
   const repo = currentRepo();
   ui.renderDetails(repo, repo ? state.details[repo.id] : null, detailHandlers(), state.settings);
+}
+
+/* ------------------------------------------------------------------ */
+/* Optional list organization (custom order + groups)                  */
+/* Everything below only changes EasyGit's saved layout, never folders. */
+/* ------------------------------------------------------------------ */
+
+/** Offer "Custom order" in the Sort menu only while organization uses it. */
+function syncSortMenu(flags, sortBy) {
+  const sort = document.getElementById('repo-sort');
+  if (!sort) return;
+  let custom = sort.querySelector('option[value="custom"]');
+  if (flags.customSort && !custom) {
+    custom = document.createElement('option');
+    custom.value = 'custom';
+    custom.textContent = 'Custom order';
+    sort.insertBefore(custom, sort.firstChild);
+  } else if (!flags.customSort && custom) {
+    custom.remove();
+  }
+  if (sort.value !== sortBy) sort.value = sortBy;
+}
+
+/** Apply a layout change, save it, and redraw. */
+function updateLayout(change) {
+  const next = change(state.layout);
+  if (next === state.layout) return;
+  state.savedLayout = next;
+  state.layout = next;
+  api.setLayout(next).catch(() => {
+    ui.showToast({ type: 'error', title: 'Could not save your list layout', body: 'Your change is shown but may not be remembered.' });
+  });
+  rerender();
+}
+
+function renderOrganized(flags, sortBy) {
+  const searching = !!state.filter.trim();
+  const custom = sortBy === 'custom';
+  const canReorder = flags.manual || flags.customGroups;
+  let hint = null;
+  if (canReorder && !custom) hint = 'Choose “Custom order” in Sort to drag projects into place.';
+  else if (canReorder && searching) hint = 'Clear the search to drag projects into place.';
+  const suggestions = flags.suggest ? org.suggestGroups(state.repos, state.layout) : [];
+  const view = org.buildListView(state.repos, state.layout, { query: state.filter, sortBy, groups: flags.groups });
+
+  renderOrganizedList(view, {
+    total: state.repos.length,
+    query: state.filter,
+    selectedId: state.selectedId,
+    onSelect: selectRepo,
+    checkingIds: state.checking,
+    cardOpts: {
+      onRename: renameRepoById,
+      onRemove: removeRepoById,
+      onMoveToGroup: flags.customGroups ? moveRepoToGroup : null,
+    },
+    dragEnabled: custom && !searching,
+    canReorder,
+    canMoveAcross: flags.customGroups,
+    canEditGroups: flags.customGroups,
+    groupIds: state.layout.groups.map((g) => g.id),
+    hint,
+    suggestions,
+    onReviewSuggestions: () => reviewSuggestions(suggestions),
+    onDismissSuggestions: () => updateLayout((l) => org.dismissSuggestions(l, suggestions.map((s) => s.signature))),
+    onNewGroup: () => newGroup([]),
+    onToggleGroup: (groupId, collapse) => updateLayout((l) => org.setCollapsed(l, groupId, collapse)),
+    onRenameGroup: renameGroupById,
+    onDeleteGroup: deleteGroupById,
+    // groupId undefined = flat list (reorder only); null = "Not in a group".
+    onDropRepo: ({ repoId, groupId, beforeId }) =>
+      updateLayout((l) => (groupId === undefined ? org.reorderRepo(l, repoId, beforeId) : org.moveRepo(l, repoId, groupId, beforeId))),
+    onDropGroup: ({ groupId, beforeGroupId }) => updateLayout((l) => org.moveGroup(l, groupId, beforeGroupId)),
+  });
+}
+
+function groupNameTaken(name, exceptId) {
+  const n = name.trim().toLowerCase();
+  const taken = state.layout.groups.some((g) => g.id !== exceptId && g.name.toLowerCase() === n);
+  if (taken) ui.showToast({ type: 'warn', title: 'Name already used', body: `There is already a group called “${name}”.` });
+  return taken;
+}
+
+/** "New group", optionally moving some projects straight into it. */
+function newGroup(repoIds) {
+  showGroupNameModal({ title: 'New group', confirmLabel: 'Create group' }, (name) => {
+    if (groupNameTaken(name)) return;
+    updateLayout((l) => org.createGroup(l, name, repoIds).layout);
+  });
+}
+
+function renameGroupById(groupId) {
+  const group = state.layout.groups.find((g) => g.id === groupId);
+  if (!group) return;
+  showGroupNameModal({ title: 'Rename group', initial: group.name, confirmLabel: 'Save name' }, (name) => {
+    if (groupNameTaken(name, groupId)) return;
+    updateLayout((l) => org.renameGroup(l, groupId, name));
+  });
+}
+
+function deleteGroupById(groupId) {
+  const group = state.layout.groups.find((g) => g.id === groupId);
+  if (!group) return;
+  const n = group.repoIds.length;
+  ui.showConfirm(
+    {
+      title: 'Delete this group?',
+      message: n
+        ? `Delete the group “${group.name}”? Its ${n} project${n === 1 ? '' : 's'} will stay in EasyGit under “Not in a group”. No folders or files are touched.`
+        : `Delete the empty group “${group.name}”? No folders or files are touched.`,
+      confirmLabel: 'Delete group',
+    },
+    () => updateLayout((l) => org.deleteGroup(l, groupId))
+  );
+}
+
+/** The "Move to group" button on a card (an alternative to drag-and-drop). */
+function moveRepoToGroup(repoId) {
+  const repo = state.repos.find((r) => r.id === repoId);
+  if (!repo) return;
+  const current = org.groupOf(state.layout, repoId);
+  showMoveToGroupModal(
+    repo,
+    state.layout.groups,
+    current ? current.id : null,
+    (groupId) => updateLayout((l) => org.moveRepo(l, repoId, groupId, null)),
+    () => newGroup([repoId])
+  );
+}
+
+function reviewSuggestions(suggestions) {
+  showSuggestionsModal(suggestions, new Map(state.repos.map((r) => [r.id, r])), {
+    onAccept: (s) => {
+      if (groupNameTaken(s.name)) return;
+      updateLayout((l) => org.acceptSuggestion(l, s).layout);
+      ui.showToast({ type: 'success', title: 'Group created', body: `“${s.name}” now groups ${s.repoIds.length} projects. No folders were changed.` });
+    },
+    onDismiss: (s) => updateLayout((l) => org.dismissSuggestions(l, [s.signature])),
+  });
 }
 
 /** Rename a repository directly from the list (reuses the rename dialog + IPC). */
@@ -126,9 +286,13 @@ function wireGlobalButtons() {
   }
   const sort = document.getElementById('repo-sort');
   if (sort) {
-    sort.value = state.settings.sortBy || 'attention';
+    syncSortMenu(org.orgFlags(state.settings), org.effectiveSort(state.settings));
     sort.addEventListener('change', async () => {
-      state.settings = await api.setSettings({ sortBy: sort.value });
+      const partial = { sortBy: sort.value };
+      // Remember the automatic sort to return to if organization is turned off.
+      const previous = org.effectiveSort(state.settings);
+      if (sort.value === 'custom' && previous !== 'custom') partial.sortFallback = previous;
+      state.settings = await api.setSettings(partial);
       rerender();
     });
   }
@@ -501,7 +665,18 @@ function switchVersionLine(name) {
 /** Open the settings dialog; changes apply live and are persisted. */
 function openSettings() {
   ui.showSettingsModal(state.settings, async (newSettings) => {
-    state.settings = await api.setSettings(newSettings);
+    // The dialog holds a copy taken when it opened; never let its stale sort
+    // overwrite the one chosen since (e.g. by an earlier toggle below).
+    const { sortBy, sortFallback, ...changes } = newSettings;
+    // Turning on manual order or groups switches the list to "Custom order"
+    // (remembering the previous sort, which comes back if it is turned off).
+    const before = org.orgFlags(state.settings).customSort;
+    if (!before && org.orgFlags({ ...state.settings, ...changes }).customSort) {
+      const previous = org.effectiveSort(state.settings);
+      changes.sortBy = 'custom';
+      changes.sortFallback = previous === 'custom' ? 'attention' : previous;
+    }
+    state.settings = await api.setSettings(changes);
     applyAppearance(state.settings);
     rerender();
   });
