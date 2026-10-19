@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node --test test/",
+    "test": "node --test",
     "make-icons": "electron scripts/make-icons.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder",
