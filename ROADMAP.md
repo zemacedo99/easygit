@@ -99,19 +99,19 @@ before being added:
 - [ ] Add macOS (`.dmg`) and Linux (`AppImage`) distributables. The
       electron-builder config for these already exists, but they must be built on
       their own platforms and have not been verified yet.
-- [ ] **Auto-update support — still pending.** Needs a release/update *hosting
-      strategy* first (e.g. a GitHub Releases or S3 feed) before wiring in
-      `electron-updater`. Deliberately not enabled yet: no release server URL,
-      tokens, or credentials are hardcoded. See the note below.
+- [x] **In-app updates** (from v1.4.0): Settings → *Check for updates* plus one
+      quiet check after start; download with progress, SHA-256 verification,
+      then a silent in-place NSIS upgrade or a portable self-replace, and restart.
+      Source: the release tags of this Bitbucket repository, read with Git and the
+      user's existing sign-in (no stored credentials). See
+      [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md#in-app-updates).
+- [ ] **Code-sign** the installer/portable (a signed publisher would add a second
+      integrity check and stop SmartScreen warnings).
+- [ ] An update source that doesn't require Bitbucket access (e.g. an internal
+      HTTPS file server), for users outside the repository.
 - [ ] Optional **brand logo** integration once the official asset file
       is available (documented placeholder path:
       `src/renderer/assets/brand-logo.png`).
-
-> **Auto-update (future):** EasyGit is structured so auto-update can be added
-> later without rework — packaging already produces versioned artifacts. To enable
-> it, decide where releases will be hosted, publish artifacts there, add
-> `electron-updater`, and check for updates on startup. This is intentionally left
-> as a documented follow-up rather than half-implemented.
 
 ---
 

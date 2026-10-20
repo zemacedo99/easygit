@@ -25,6 +25,7 @@ versions/vX.Y.Z/
   EasyGit-X.Y.Z-portable.exe     # portable executable
   SHA256SUMS.txt                 # checksums for the two .exe files
   RELEASE_NOTES.md               # human-readable notes for this version
+  update.json                    # in-app updater metadata (from v1.4.0 on)
 ```
 
 > The generated `dist/` folder is **always ignored** and is **never** committed.
@@ -192,6 +193,23 @@ Get-ChildItem versions\v1.0.1\*.exe | ForEach-Object {
 
 Then re-verify the copies match the originals from `dist/` before committing.
 
+### 11a. Generate the in-app update metadata (required from v1.4.0)
+
+EasyGit updates itself from this repository (see [In-app updates](#in-app-updates)).
+It needs `versions/vX.Y.Z/update.json`, generated from the real files:
+
+```bash
+node scripts/make-update-metadata.mjs 1.0.1
+```
+
+The script hashes both executables, checks them against `SHA256SUMS.txt`, copies
+this version's "What's new" from `src/renderer/changelog.mjs`, validates the
+result exactly as EasyGit will, and writes `update.json`. It **refuses** versions
+older than v1.4.0 and versions that are already tagged, so released folders are
+never touched. Then run `npm test`: `test/updateMetadata.test.mjs` **fails** if
+any release folder from v1.4.0 onward has no `update.json`, or if it doesn't match
+the files or the changelog — so a release without updater metadata cannot pass.
+
 ### 12. Create the release notes
 
 Create `versions/v1.0.1/RELEASE_NOTES.md`. Use the previous version's notes as a
@@ -254,17 +272,49 @@ under `versions/v1.0.1/`; `dist/` is still ignored; and the remote tag matches.
 - ❌ **Do not** commit the `dist/` folder.
 - ❌ **Do not** commit generated `.exe` files from anywhere **except**
   `versions/vX.Y.Z/`.
-- ❌ **Do not** implement auto-update as part of a normal manual release. (Auto-
-  update is a separate, deliberately-deferred roadmap item — see
-  [ROADMAP.md](../ROADMAP.md).)
+- ❌ **Do not** change the updater itself as part of a normal release; a release
+  only adds `versions/vX.Y.Z/update.json` (step 11a).
 - 🔁 If a mistake is found **after** a release, ship a new patch version (e.g.
   `v1.0.2`) rather than altering the released one.
 
 ---
 
+## In-app updates
+
+From **v1.4.0**, EasyGit can update itself (Settings → *About EasyGit* →
+**Check for updates**; it also checks quietly once after starting).
+
+- **Source:** this Git repository, configured in one place:
+  [`src/main/updateConfig.js`](../src/main/updateConfig.js). The newest `vX.Y.Z`
+  tag is the latest release; its `versions/vX.Y.Z/update.json` lists the files,
+  sizes and SHA-256 checksums.
+- **Access:** the repository is private, so EasyGit reads it with **Git**, using
+  the sign-in Windows already has for Bitbucket (Git Credential Manager). EasyGit
+  never asks for, stores or logs credentials, and Git prompts are disabled. People
+  who cannot open the repository in Bitbucket get a friendly "No access to
+  EasyGit updates" message and must update manually (below).
+- **Download:** only the one file needed (installer or portable exe) is fetched
+  from the release tag — not the whole repository history.
+- **Verification:** the file's size and SHA-256 must match `update.json`, or it is
+  deleted and nothing runs. It is checked again right before installing.
+- **Installed (NSIS):** EasyGit runs the new installer silently
+  (`/S --updated --easygit-restart`): it upgrades in place, keeps settings, and
+  starts the new version (the restart is done by
+  [`build/installer.nsh`](../build/installer.nsh), because electron-builder's own
+  `--force-run` relaunch does not work on every Windows setup). No uninstall
+  needed.
+- **Portable:** the verified new exe is started as a helper; it waits for the old
+  exe to close, swaps itself into the same file name (rolling back on any error)
+  and restarts it.
+- **Testing:** set `EASYGIT_UPDATE_SOURCE=file:///C:/path/to/test-repo` to point a
+  build at a local test repository instead of Bitbucket.
+- **First self-updating release:** users on v1.3.0 or older don't have the
+  updater, so they install v1.4.0 once manually; after that, updates are in-app.
+
 ## How users update (manual)
 
-EasyGit has no auto-update yet, so updating is a manual download-and-run.
+For versions before v1.4.0, or for people without access to the update source,
+updating is a manual download-and-run.
 
 ### Installer users
 
@@ -313,7 +363,9 @@ Claude should:
    download links **before building**, and make sure `npm test` passes.
 4. **Build the app** with `npm run dist:win`.
 5. **Create the new `versions/vX.Y.Z/` folder** and copy in the installer,
-   portable, `SHA256SUMS.txt`, and `RELEASE_NOTES.md`.
+   portable, `SHA256SUMS.txt`, and `RELEASE_NOTES.md`, then generate
+   `update.json` with `node scripts/make-update-metadata.mjs X.Y.Z` and run
+   `npm test` again.
 6. **Commit the release artifacts** with `Add vX.Y.Z release artifacts` (plus the
    version bump, the changelog and the README update).
 7. **Create and push the new annotated tag** `vX.Y.Z`, pointing at that commit,
@@ -322,4 +374,4 @@ Claude should:
    and the SHA-256 checksums.
 
 Claude should **not** modify previous releases, move old tags, commit `dist/`, or
-implement auto-update as part of this flow.
+change the updater as part of this flow.

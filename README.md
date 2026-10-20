@@ -346,6 +346,27 @@ Everything extra is optional and off by default, so the app stays simple:
 - **Appearance** — a **light theme** and a larger **text size** for readability.
 - **What's new & version history** (under *About EasyGit*) — every EasyGit
   release, newest first, with what each one added.
+- **Check for updates** (under *About EasyGit*) — see below.
+
+### Updating EasyGit from inside the app
+
+From v1.4.0, EasyGit can update itself. Shortly after it starts it quietly checks
+for a newer version; if there is one, a small **Update available** label appears
+next to the version in the header. Nothing is installed until you choose to:
+
+1. Open ⚙ Settings → *About EasyGit* (or click **Update available**).
+2. Optionally read **What's new** for the new version.
+3. Click **Update to vX.Y.Z** — it downloads in the background with progress,
+   then is checked against the official checksum.
+4. Click **Restart and update**. EasyGit closes, updates itself and starts again;
+   your projects and settings are kept. The installed app upgrades in place (no
+   uninstall); the portable app replaces its own file.
+
+Updates come from the EasyGit repository on Bitbucket, using the sign-in your
+computer already has for it — EasyGit never asks for or stores passwords. If you
+can't open the EasyGit project in Bitbucket, the check shows a friendly "No
+access" message and you can keep updating manually from the download links.
+A download that doesn't match the official checksum is deleted and never run.
 
 ---
 
