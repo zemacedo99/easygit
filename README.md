@@ -41,9 +41,9 @@ not.
 
 ---
 
-## Optional project tools (development version)
+## Optional project tools
 
-These additions are in the source checkout; the v1.2.0 downloads below are unchanged.
+These additions are included in v1.3.0.
 
 - **Open in VS Code** opens the project with your installed editor, even before
   checking changes. Hide it with Settings → Show “Open in VS Code” button.
@@ -72,7 +72,7 @@ These additions are in the source checkout; the v1.2.0 downloads below are uncha
 
 Simple mode keeps its existing computer ⇄ online flow. Stack, file removal and
 diff controls are only available in Detailed mode. A stack is temporary storage,
-not an online backup. No new release or automatic update is involved.
+not an online backup. No automatic update is involved.
 
 Developer verification: `npm test` includes offline temporary-repository tests.
 On a Windows desktop, run
@@ -83,26 +83,26 @@ output for inspection. It never uses your saved projects.
 
 ## Download the latest version
 
-**Latest release: v1.2.0.** Pick a download below, then follow
+**Latest release: v1.3.0.** Pick a download below, then follow
 [Installing EasyGit](#installing-easygit). Node.js is **not** required; **Git**
 must be installed.
 
 | Download | Best for | File |
 | --- | --- | --- |
-| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 1.2.0.exe`](versions/v1.2.0/EasyGit%20Setup%201.2.0.exe) |
-| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-1.2.0-portable.exe`](versions/v1.2.0/EasyGit-1.2.0-portable.exe) |
+| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 1.3.0.exe`](versions/v1.3.0/EasyGit%20Setup%201.3.0.exe) |
+| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-1.3.0-portable.exe`](versions/v1.3.0/EasyGit-1.3.0-portable.exe) |
 
 - The app is currently **unsigned**, so Windows SmartScreen may warn on first
   launch ("Windows protected your PC" → **More info** → **Run anyway**).
 - **Verify your download** against the checksums in
-  [`versions/v1.2.0/SHA256SUMS.txt`](versions/v1.2.0/SHA256SUMS.txt):
+  [`versions/v1.3.0/SHA256SUMS.txt`](versions/v1.3.0/SHA256SUMS.txt):
   ```powershell
-  Get-FileHash ".\versions\v1.2.0\EasyGit Setup 1.2.0.exe" -Algorithm SHA256
+  Get-FileHash ".\versions\v1.3.0\EasyGit Setup 1.3.0.exe" -Algorithm SHA256
   ```
-- Full notes: [`versions/v1.2.0/RELEASE_NOTES.md`](versions/v1.2.0/RELEASE_NOTES.md).
+- Full notes: [`versions/v1.3.0/RELEASE_NOTES.md`](versions/v1.3.0/RELEASE_NOTES.md).
 
 **Older releases** are kept under [`versions/`](versions/) (for example,
-`versions/v1.1.0/` and `versions/v1.0.0/`).
+`versions/v1.2.0/`, `versions/v1.1.0/` and `versions/v1.0.0/`).
 
 ---
 
