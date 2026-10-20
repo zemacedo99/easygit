@@ -87,26 +87,26 @@ the same way.
 
 ## Download the latest version
 
-**Latest release: v1.3.0.** Pick a download below, then follow
+**Latest release: v2.0.0.** Pick a download below, then follow
 [Installing EasyGit](#installing-easygit). Node.js is **not** required; **Git**
 must be installed.
 
 | Download | Best for | File |
 | --- | --- | --- |
-| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 1.3.0.exe`](versions/v1.3.0/EasyGit%20Setup%201.3.0.exe) |
-| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-1.3.0-portable.exe`](versions/v1.3.0/EasyGit-1.3.0-portable.exe) |
+| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 2.0.0.exe`](versions/v2.0.0/EasyGit%20Setup%202.0.0.exe) |
+| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-2.0.0-portable.exe`](versions/v2.0.0/EasyGit-2.0.0-portable.exe) |
 
 - The app is currently **unsigned**, so Windows SmartScreen may warn on first
   launch ("Windows protected your PC" → **More info** → **Run anyway**).
 - **Verify your download** against the checksums in
-  [`versions/v1.3.0/SHA256SUMS.txt`](versions/v1.3.0/SHA256SUMS.txt):
+  [`versions/v2.0.0/SHA256SUMS.txt`](versions/v2.0.0/SHA256SUMS.txt):
   ```powershell
-  Get-FileHash ".\versions\v1.3.0\EasyGit Setup 1.3.0.exe" -Algorithm SHA256
+  Get-FileHash ".\versions\v2.0.0\EasyGit Setup 2.0.0.exe" -Algorithm SHA256
   ```
-- Full notes: [`versions/v1.3.0/RELEASE_NOTES.md`](versions/v1.3.0/RELEASE_NOTES.md).
+- Full notes: [`versions/v2.0.0/RELEASE_NOTES.md`](versions/v2.0.0/RELEASE_NOTES.md).
 
 **Older releases** are kept under [`versions/`](versions/) (for example,
-`versions/v1.2.0/`, `versions/v1.1.0/` and `versions/v1.0.0/`).
+`versions/v1.3.0/`, `versions/v1.2.0/`, `versions/v1.1.0/` and `versions/v1.0.0/`).
 
 ---
 
@@ -336,7 +336,7 @@ How it works with search and sorting:
 The ⚙ button is in the top-right of the window, next to the main actions, so
 Settings is always available — even before you add any projects. The EasyGit
 version you are running is shown next to the app name (for example
-`EasyGit v1.3.0`).
+`EasyGit v2.0.0`).
 
 Everything extra is optional and off by default, so the app stays simple:
 

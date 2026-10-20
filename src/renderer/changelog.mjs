@@ -19,6 +19,50 @@
  */
 export const CHANGELOG = [
   {
+    version: '2.0.0',
+    date: '2026-10-20',
+    summary: 'EasyGit can now update itself, plus faster uploads and an always-available Settings.',
+    sections: [
+      {
+        heading: 'Updates from inside EasyGit',
+        items: [
+          'Check for updates in Settings, plus one quiet check after starting',
+          'A small “Update available” label next to the version when a newer one exists',
+          'See what’s new before updating; the download is checked against the official release before anything runs',
+          'Installed EasyGit updates in place and restarts; the portable version replaces its own file',
+          'Updates come from the EasyGit project on Bitbucket, using the sign-in your computer already has',
+        ],
+      },
+      {
+        heading: 'Saving and uploading (optional, off by default)',
+        items: [
+          'Have the description of your changes prepared automatically (you can still edit it)',
+          'Set a default description, or let EasyGit describe the files you actually changed',
+          'Save and upload in one click, without being asked for a description',
+          '✨ Suggest now describes files inside new folders and mixed changes properly',
+        ],
+      },
+      {
+        heading: 'Everyday improvements',
+        items: [
+          'Settings is always available from the top of the window, even with no projects',
+          'The EasyGit version is shown next to the app name',
+          'What’s new & version history inside Settings',
+          'Optional: success and information messages close by themselves; warnings and errors stay',
+        ],
+      },
+      {
+        heading: 'Also included (first released in v1.3.0)',
+        items: [
+          'Optional repository organization: your own order, collapsible groups and group suggestions from project folders',
+          'Open in VS Code',
+          'Set changes aside for later, view the changes in a saved version, and move files to the Recycle Bin (detailed mode)',
+          'Long file lists scroll while headers and counts stay visible',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-10-20',
     summary: 'Organize your repository list your own way, plus new project tools.',
