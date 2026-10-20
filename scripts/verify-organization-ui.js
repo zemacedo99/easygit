@@ -87,10 +87,10 @@ const PHASES = {
     assert(document.getElementById('repo-count').textContent === '5', 'count');
     const offOrder = paths();
     await openSettings();
-    assert(document.querySelector('.settings-nested').hidden, 'nested options visible while OFF');
+    assert([...document.querySelectorAll('.settings-nested')].find(n => n.textContent.includes('Arrange projects in your own order')).hidden, 'nested options visible while OFF');
     // 2-3. Enable organization + manual order.
     await setSetting('Organize your repository list', true);
-    assert(!document.querySelector('.settings-nested').hidden, 'nested options hidden while ON');
+    assert(![...document.querySelectorAll('.settings-nested')].find(n => n.textContent.includes('Arrange projects in your own order')).hidden, 'nested options hidden while ON');
     assert(settingBox('Create and edit your own groups').disabled, 'custom groups should need groups');
     await shot('settings-organization');
     await setSetting('Arrange projects in your own order', true);

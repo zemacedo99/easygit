@@ -81,7 +81,8 @@ UI harness. It uses an isolated temporary profile and 250 disposable files,
 recycles one test file, and leaves its temporary profile/screenshot path in the
 output for inspection. It never uses your saved projects.
 `scripts/verify-organization-ui.js` (list organization, three restarts) and
-`scripts/verify-header-ui.js` (header version, Settings and version history) work
+`scripts/verify-header-ui.js` (header version, Settings and version history) and
+`scripts/verify-describe-ui.js` (upload descriptions, ✨ Suggest, notifications) work
 the same way.
 
 ## Download the latest version
@@ -341,6 +342,16 @@ Everything extra is optional and off by default, so the app stays simple:
 
 - **Show detailed save/upload steps** — turns on the advanced flow.
 - **Show version line details** — shows/switches branches.
+- **Saving and uploading** — optionally have the description of your changes
+  **prepared automatically** (still editable), with an optional **default
+  description**; and, under it, **Save and upload without asking**, so
+  *Upload my changes* saves and uploads in one click using that description.
+  The description comes from your default text, or else from the files you
+  actually changed (the same local ✨ Suggest, never an online service), or
+  else "Update project files".
+- **Automatically close notifications** — success/information messages close
+  after about 5 seconds (paused while you point at them); warnings and errors
+  always stay until you close them. Off by default.
 - **Organize your repository list** — your own order and EasyGit-only groups
   (see above).
 - **Appearance** — a **light theme** and a larger **text size** for readability.
