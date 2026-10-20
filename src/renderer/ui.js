@@ -1605,17 +1605,108 @@ export function showSettingsModal(settings, about, onChange) {
         ['larger', 'Larger'],
       ], 'normal'),
       h('div', { className: 'settings-section', text: 'About EasyGit' }),
-      h('div', { className: 'setting-row setting-row-choice' }, [
-        h('div', { className: 'setting-grow' }, [
-          h('div', { className: 'setting-title', text: about && about.version ? `EasyGit v${about.version}` : 'EasyGit' }),
-          h('div', { className: 'setting-desc', text: 'See what changed in each version.' }),
-        ]),
-        h('button', { className: 'btn btn-sm', onClick: () => showVersionHistoryModal(about && about.version) }, 'What’s new & version history'),
-      ]),
+      aboutSection(about || {}),
     ]),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });
   syncOrganization();
+}
+
+const BUILD_KIND_LABEL = { installed: 'Installed', portable: 'Portable', development: 'Development build' };
+
+/**
+ * Settings → About EasyGit: the running version and in-app updates. It redraws
+ * itself whenever the update state changes while Settings is open.
+ * @param {{version?: string, update?: object}} about  see openSettings in app.js
+ */
+function aboutSection(about) {
+  const box = h('div', { className: 'about-box' });
+  const upd = about.update;
+  const render = (u) => {
+    box.textContent = '';
+    const s = u || { status: 'idle' };
+    const kind = BUILD_KIND_LABEL[s.buildKind];
+    const checked = s.lastCheckedAt ? ` · Last checked ${formatLastChecked(s.lastCheckedAt).replace(/^Checked /i, '').toLowerCase()}` : '';
+    box.appendChild(
+      h('div', { className: 'setting-grow' }, [
+        h('div', { className: 'setting-title', text: 'EasyGit' }),
+        h('div', { className: 'setting-desc', text: `Current version: v${about.version || '?'}${kind ? ` · ${kind}` : ''}${checked}` }),
+      ])
+    );
+    if (upd) box.appendChild(updateStatus(s, about));
+    box.appendChild(
+      h('div', { className: 'about-actions' }, [
+        h('button', { className: 'btn btn-sm', onClick: () => showVersionHistoryModal(about.version) }, 'What’s new & version history'),
+      ])
+    );
+  };
+  render(upd && upd.get());
+  if (upd) {
+    const stop = upd.subscribe((u) => {
+      if (!box.isConnected) return stop(); // Settings was closed
+      render(u);
+    });
+  }
+  return box;
+}
+
+/** The update part of About, for each update state. */
+function updateStatus(s, about) {
+  const upd = about.update;
+  const latest = s.latest && s.latest.version;
+  const line = (title, detail, tone) =>
+    h('div', { className: `update-status${tone ? ` update-${tone}` : ''}` }, [
+      h('div', { className: 'update-title', text: title }),
+      detail ? h('div', { className: 'setting-desc', text: detail }) : null,
+    ]);
+  const button = (label, onClick, primary, disabled) =>
+    h('button', { className: `btn btn-sm${primary ? ' btn-primary' : ''}`, disabled: disabled ? 'disabled' : null, onClick }, label);
+  const progress = (pct) => {
+    const bar = h('div', { className: `progress-bar${pct == null ? ' indeterminate' : ''}` });
+    if (pct != null) bar.style.width = `${pct}%`; // CSP forbids inline style attributes
+    return h('div', { className: 'progress-track update-progress' }, [bar]);
+  };
+  const whatsNew = () => button(`What’s new in v${latest}`, () => showVersionHistoryModal(about.version, s.latest && s.latest.changelog ? [s.latest.changelog] : []));
+  const wrap = (...nodes) => h('div', { className: 'update-box' }, nodes);
+  const canInstall = s.buildKind === 'installed' || s.buildKind === 'portable';
+
+  switch (s.status) {
+    case 'checking':
+      return wrap(h('div', { className: 'update-status update-busy' }, [h('span', { className: 'spinner-sm' }), 'Checking for updates…']));
+    case 'up-to-date':
+      return wrap(line('You’re up to date', `EasyGit v${about.version} is the latest version.`, 'good'), h('div', { className: 'about-actions' }, [button('Check again', () => upd.check())]));
+    case 'ahead':
+      return wrap(line('You’re ahead of the latest release', `You have v${about.version}; the latest release is v${latest}. There is nothing to update.`), h('div', { className: 'about-actions' }, [button('Check again', () => upd.check())]));
+    case 'available':
+      return wrap(
+        line('Update available', `You have: v${about.version}   ·   Latest: v${latest}`, 'new'),
+        canInstall ? null : h('div', { className: 'setting-desc', text: 'Updates install from the installed or portable EasyGit, not from a development build.' }),
+        h('div', { className: 'about-actions' }, [whatsNew(), button(`Update to v${latest}`, () => upd.download(), true, !canInstall)])
+      );
+    case 'downloading':
+      return wrap(
+        line(`Downloading v${latest}…`, s.phase === 'connecting' ? 'Connecting to the update source…' : `${s.progress || 0}% downloaded. You can keep using EasyGit.`),
+        progress(s.phase === 'connecting' ? null : s.progress || 0)
+      );
+    case 'verifying':
+      return wrap(line('Checking the download…', 'Making sure the file matches the official release.'), progress(100));
+    case 'ready':
+      return wrap(
+        line(`v${latest} is ready to install`, s.buildKind === 'portable' ? 'EasyGit will close, replace this portable file with the new version and start again.' : 'EasyGit will close, update itself and start again. Your projects and settings are kept.', 'new'),
+        h('div', { className: 'about-actions' }, [whatsNew(), button('Restart and update', () => upd.install(), true)])
+      );
+    case 'installing':
+      return wrap(h('div', { className: 'update-status update-busy' }, [h('span', { className: 'spinner-sm' }), 'Restarting to update…']));
+    case 'error': {
+      const retryDownload = s.latest && s.latest.installer && ['download', 'checksum', 'disk', 'install'].includes(s.error && s.error.kind);
+      return wrap(
+        line(s.error ? s.error.title : 'Update problem', s.error ? s.error.detail : '', 'error'),
+        h('div', { className: 'about-actions' }, [button('Try again', () => (retryDownload ? upd.download() : upd.check()))])
+      );
+    }
+    default:
+      return wrap(h('div', { className: 'about-actions' }, [button('Check for updates', () => upd.check(), true)]));
+  }
 }
 
 /**
@@ -1623,9 +1714,16 @@ export function showSettingsModal(settings, about, onChange) {
  * the running version) starts open; older releases are collapsed to keep it short.
  * @param {string} [currentVersion]  the running version, marked "You have this version"
  */
-export function showVersionHistoryModal(currentVersion) {
-  const releases = releasesNewestFirst();
-  const openVersion = releases.some((r) => r.version === currentVersion) ? currentVersion : releases[0] && releases[0].version;
+export function showVersionHistoryModal(currentVersion, upcoming = []) {
+  // `upcoming`: "What's new" of an available update (from its update.json), shown
+  // on top of the bundled history and opened so it can be read before updating.
+  const known = new Set(releasesNewestFirst().map((r) => r.version));
+  const extra = upcoming.filter((r) => r && r.version && !known.has(r.version));
+  const releases = releasesNewestFirst([...extra, ...releasesNewestFirst()]);
+  const isNew = new Set(extra.map((r) => r.version));
+  const openVersion = extra.length
+    ? releases[0].version
+    : releases.some((r) => r.version === currentVersion) ? currentVersion : releases[0] && releases[0].version;
   const list = h(
     'div',
     { className: 'changelog' },
@@ -1636,6 +1734,7 @@ export function showVersionHistoryModal(currentVersion) {
           h('span', { className: 'changelog-version', text: `v${r.version}` }),
           date ? h('span', { className: 'changelog-date', text: date }) : null,
           r.version === currentVersion ? h('span', { className: 'pill changelog-current', text: 'You have this version' }) : null,
+          isNew.has(r.version) ? h('span', { className: 'pill changelog-new', text: 'New — available to install' }) : null,
         ]),
         h('p', { className: 'changelog-intro', text: r.summary }),
         ...r.sections.map((sec) =>

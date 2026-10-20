@@ -43,7 +43,8 @@ const STEPS = `
   // 5. Zero repositories: empty state, Settings still opens from the header.
   assert(!document.getElementById('empty-state').hidden && document.querySelectorAll('.repo-card').length === 0, 'expected empty state');
   await openSettings();
-  assert(document.body.textContent.includes('EasyGit v' + runtime), 'About section version');
+  assert(document.body.textContent.includes('Current version: v' + runtime), 'About section version');
+  assert([...document.querySelectorAll('button')].some(b => b.textContent.includes('Check for updates')), 'Check for updates missing');
   await shot('settings-zero-repos');
   // 7-10. Version history from Settings, newest first, grounded content, scrolls.
   click('What’s new & version history');

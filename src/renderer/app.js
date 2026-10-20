@@ -50,6 +50,7 @@ async function init() {
   }
   applyAppearance(state.settings);
   showVersion();
+  watchUpdates();
   try {
     state.savedLayout = await api.getLayout();
   } catch (e) {
@@ -247,6 +248,48 @@ async function showVersion() {
     el.hidden = !state.version;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* In-app updates: the main process checks, downloads and verifies;     */
+/* here we only show the state and pass the user's explicit choices.    */
+/* ------------------------------------------------------------------ */
+
+const updateListeners = new Set();
+
+async function watchUpdates() {
+  if (!api.getUpdateState) return;
+  api.onUpdateState((s) => setUpdateState(s));
+  try {
+    setUpdateState(await api.getUpdateState());
+  } catch (e) {
+    /* non-fatal */
+  }
+  const badge = document.getElementById('update-badge');
+  if (badge) badge.addEventListener('click', openSettings);
+}
+
+function setUpdateState(s) {
+  state.update = s;
+  // A subtle hint next to the version; nothing installs without the user.
+  const badge = document.getElementById('update-badge');
+  if (badge) {
+    const shown = { available: 'Update available', downloading: 'Downloading update…', verifying: 'Downloading update…', ready: 'Update ready' }[s && s.status];
+    badge.hidden = !shown;
+    badge.textContent = shown || '';
+  }
+  updateListeners.forEach((fn) => fn(s));
+}
+
+const updateBridge = {
+  get: () => state.update,
+  subscribe: (fn) => {
+    updateListeners.add(fn);
+    return () => updateListeners.delete(fn);
+  },
+  check: () => api.checkForUpdates(),
+  download: () => api.downloadUpdate(),
+  install: () => api.installUpdate(),
+};
 
 /** Rename a repository directly from the list (reuses the rename dialog + IPC). */
 function renameRepoById(id) {
@@ -680,7 +723,7 @@ function switchVersionLine(name) {
 
 /** Open the settings dialog; changes apply live and are persisted. */
 function openSettings() {
-  ui.showSettingsModal(state.settings, { version: state.version }, async (newSettings) => {
+  ui.showSettingsModal(state.settings, { version: state.version, update: api.getUpdateState ? updateBridge : null }, async (newSettings) => {
     // The dialog holds a copy taken when it opened; never let its stale sort
     // overwrite the one chosen since (e.g. by an earlier toggle below).
     const { sortBy, sortFallback, ...changes } = newSettings;
