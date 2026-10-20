@@ -63,7 +63,7 @@ const HELPERS = `
     dst.dispatchEvent(new DragEvent('drop', o));
     src.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
   };
-  const openSettings = async () => { if (!document.querySelector('.settings-gear')) { document.querySelector('.repo-card').click(); await waitFor(() => document.querySelector('.settings-gear'), 'gear'); } document.querySelector('.settings-gear').click(); await waitFor(() => document.querySelector('.settings-list'), 'settings'); };
+  const openSettings = async () => { document.getElementById('btn-settings').click(); await waitFor(() => document.querySelector('.settings-list'), 'settings'); };
   const settingBox = title => [...document.querySelectorAll('.setting-row')].find(r => r.textContent.includes(title)).querySelector('input');
   const setSetting = async (title, on) => { const cb = settingBox(title); if (cb.checked !== on) { cb.click(); await sleep(250); } };
   const closeModal = async () => { click('Done'); await waitFor(() => !document.querySelector('.modal-overlay'), 'modal closed'); };

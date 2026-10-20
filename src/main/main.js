@@ -95,6 +95,8 @@ function registerIpcHandlers() {
   // --- Environment ---------------------------------------------------------
   ipcMain.handle('git:checkInstalled', async () => git.checkGitInstalled());
   ipcMain.handle('app:storagePath', async () => repoManager.getStoragePath());
+  // The running version: package.json in development, the packaged app's metadata when installed.
+  ipcMain.handle('app:version', async () => app.getVersion());
 
   // --- Repository list -----------------------------------------------------
   ipcMain.handle('repos:list', async () => repoManager.listRepos());

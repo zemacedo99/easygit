@@ -17,6 +17,7 @@ import {
   LOCAL_GROUP_TITLES,
   LOCAL_GROUP_ORDER,
 } from './labels.js';
+import { releasesNewestFirst, formatReleaseDate } from './changelog.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Tiny DOM helper                                                     */
@@ -114,7 +115,7 @@ export function openModal({ title, subtitle, body, footer = [] }) {
     document.removeEventListener('keydown', onKey);
   };
   const onKey = (e) => {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape' && root.lastElementChild === overlay) close();
   };
   document.addEventListener('keydown', onKey);
 
@@ -308,7 +309,7 @@ export function renderDetails(repo, details, handlers, settings) {
   detailsEl.hidden = false;
   detailsEl.textContent = '';
 
-  // Header: name + path + status badge + settings gear.
+  // Header: name + path + status badge (Settings lives in the app header).
   detailsEl.appendChild(
     h('div', { className: 'details-header' }, [
       h('div', { className: 'details-title' }, [
@@ -317,7 +318,6 @@ export function renderDetails(repo, details, handlers, settings) {
       ]),
       h('div', { className: 'details-header-right' }, [
         statusBadge(repo.statusTone, repo.statusLabel),
-        h('button', { className: 'icon-btn settings-gear', title: 'Settings', onClick: () => handlers.onSettings() }, '⚙'),
       ]),
     ])
   );
@@ -1517,7 +1517,7 @@ export function hideHeaderBusy() {
  * @param {{showAdvanced:boolean, showBranch:boolean}} settings
  * @param {(settings: object) => void} onChange
  */
-export function showSettingsModal(settings, onChange) {
+export function showSettingsModal(settings, about, onChange) {
   const current = { ...settings };
   const rows = {}; // key -> { row, cb }, used to show/enable the nested options
 
@@ -1604,10 +1604,57 @@ export function showSettingsModal(settings, onChange) {
         ['large', 'Large'],
         ['larger', 'Larger'],
       ], 'normal'),
+      h('div', { className: 'settings-section', text: 'About EasyGit' }),
+      h('div', { className: 'setting-row setting-row-choice' }, [
+        h('div', { className: 'setting-grow' }, [
+          h('div', { className: 'setting-title', text: about && about.version ? `EasyGit v${about.version}` : 'EasyGit' }),
+          h('div', { className: 'setting-desc', text: 'See what changed in each version.' }),
+        ]),
+        h('button', { className: 'btn btn-sm', onClick: () => showVersionHistoryModal(about && about.version) }, 'What’s new & version history'),
+      ]),
     ]),
     footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Done')],
   });
   syncOrganization();
+}
+
+/**
+ * "What's new & version history": every release, newest first. The newest (or
+ * the running version) starts open; older releases are collapsed to keep it short.
+ * @param {string} [currentVersion]  the running version, marked "You have this version"
+ */
+export function showVersionHistoryModal(currentVersion) {
+  const releases = releasesNewestFirst();
+  const openVersion = releases.some((r) => r.version === currentVersion) ? currentVersion : releases[0] && releases[0].version;
+  const list = h(
+    'div',
+    { className: 'changelog' },
+    releases.map((r) => {
+      const date = formatReleaseDate(r.date);
+      const details = h('details', { className: 'changelog-release' }, [
+        h('summary', { className: 'changelog-summary' }, [
+          h('span', { className: 'changelog-version', text: `v${r.version}` }),
+          date ? h('span', { className: 'changelog-date', text: date }) : null,
+          r.version === currentVersion ? h('span', { className: 'pill changelog-current', text: 'You have this version' }) : null,
+        ]),
+        h('p', { className: 'changelog-intro', text: r.summary }),
+        ...r.sections.map((sec) =>
+          h('div', { className: 'changelog-section' }, [
+            h('div', { className: 'changelog-heading', text: sec.heading }),
+            h('ul', { className: 'changelog-items' }, sec.items.map((item) => h('li', { text: item }))),
+          ])
+        ),
+      ]);
+      if (r.version === openVersion) details.open = true;
+      return details;
+    })
+  );
+  const close = openModal({
+    title: 'What’s new & version history',
+    subtitle: 'Every EasyGit release, newest first.',
+    body: list,
+    footer: [h('button', { className: 'btn btn-primary', onClick: () => close() }, 'Close')],
+  });
 }
 
 /**

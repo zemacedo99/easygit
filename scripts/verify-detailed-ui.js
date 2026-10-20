@@ -43,7 +43,7 @@ app.on('browser-window-created', (_event, win) => {
         if (document.querySelector('.area-stash') || document.body.textContent.includes('View changes')) throw Error('Simple mode leaked controls');
         ui.renderDetails(added.repo, null, handlers, {});
         if (!document.body.textContent.includes('Open in VS Code')) throw Error('Launcher missing before check');
-        ui.showSettingsModal({showVSCode:true}, async settings => { await api.setSettings(settings); });
+        ui.showSettingsModal({showVSCode:true}, {}, async settings => { await api.setSettings(settings); });
         const setting = [...document.querySelectorAll('label')].find(el=>el.textContent.includes('Show “Open in VS Code”'));
         setting.querySelector('input').click(); click('Done');
         await waitFor(() => !document.querySelector('.modal-overlay'));

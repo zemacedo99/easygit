@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('easygit', {
   // Environment
   checkGitInstalled: () => ipcRenderer.invoke('git:checkInstalled'),
   getStoragePath: () => ipcRenderer.invoke('app:storagePath'),
+  getVersion: () => ipcRenderer.invoke('app:version'),
 
   // Repository list
   listRepos: () => ipcRenderer.invoke('repos:list'),

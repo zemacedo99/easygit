@@ -49,6 +49,7 @@ async function init() {
     /* ignore – keep defaults */
   }
   applyAppearance(state.settings);
+  showVersion();
   try {
     state.savedLayout = await api.getLayout();
   } catch (e) {
@@ -233,6 +234,20 @@ function reviewSuggestions(suggestions) {
   });
 }
 
+/** Show the running EasyGit version (from the app metadata) next to the name. */
+async function showVersion() {
+  try {
+    state.version = await api.getVersion();
+  } catch (e) {
+    state.version = ''; // non-fatal: just leave it out
+  }
+  const el = document.getElementById('app-version');
+  if (el) {
+    el.textContent = state.version ? `v${state.version}` : '';
+    el.hidden = !state.version;
+  }
+}
+
 /** Rename a repository directly from the list (reuses the rename dialog + IPC). */
 function renameRepoById(id) {
   const repo = state.repos.find((r) => r.id === id);
@@ -272,6 +287,8 @@ function wireGlobalButtons() {
   document.getElementById('btn-scan').addEventListener('click', onScan);
   document.getElementById('btn-add').addEventListener('click', onAdd);
   document.getElementById('btn-check-all').addEventListener('click', onCheckAll);
+  // Settings is always available from the header, even with no projects.
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
 
   const removeAllBtn = document.getElementById('btn-remove-all');
   if (removeAllBtn) removeAllBtn.addEventListener('click', removeAll);
@@ -481,7 +498,6 @@ function detailHandlers() {
     // Return the promises so the clicked button can show a spinner while the
     // (long) action runs. Modal-openers below intentionally return nothing.
     onCheck: (fetch) => { const r = currentRepo(); if (r) return doCheck(r.id, !!fetch); },
-    onSettings: () => openSettings(),
 
     // Simple mode: one-click "Upload my changes" (save + upload as needed)
     onUploadChanges: () => uploadChanges(),
@@ -664,7 +680,7 @@ function switchVersionLine(name) {
 
 /** Open the settings dialog; changes apply live and are persisted. */
 function openSettings() {
-  ui.showSettingsModal(state.settings, async (newSettings) => {
+  ui.showSettingsModal(state.settings, { version: state.version }, async (newSettings) => {
     // The dialog holds a copy taken when it opened; never let its stale sort
     // overwrite the one chosen since (e.g. by an earlier toggle below).
     const { sortBy, sortFallback, ...changes } = newSettings;
