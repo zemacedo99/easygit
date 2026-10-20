@@ -25,7 +25,7 @@ versions/vX.Y.Z/
   EasyGit-X.Y.Z-portable.exe     # portable executable
   SHA256SUMS.txt                 # checksums for the two .exe files
   RELEASE_NOTES.md               # human-readable notes for this version
-  update.json                    # in-app updater metadata (from v1.4.0 on)
+  update.json                    # in-app updater metadata (from v2.0.0 on)
 ```
 
 > The generated `dist/` folder is **always ignored** and is **never** committed.
@@ -193,7 +193,7 @@ Get-ChildItem versions\v1.0.1\*.exe | ForEach-Object {
 
 Then re-verify the copies match the originals from `dist/` before committing.
 
-### 11a. Generate the in-app update metadata (required from v1.4.0)
+### 11a. Generate the in-app update metadata (required from v2.0.0)
 
 EasyGit updates itself from this repository (see [In-app updates](#in-app-updates)).
 It needs `versions/vX.Y.Z/update.json`, generated from the real files:
@@ -205,9 +205,9 @@ node scripts/make-update-metadata.mjs 1.0.1
 The script hashes both executables, checks them against `SHA256SUMS.txt`, copies
 this version's "What's new" from `src/renderer/changelog.mjs`, validates the
 result exactly as EasyGit will, and writes `update.json`. It **refuses** versions
-older than v1.4.0 and versions that are already tagged, so released folders are
+older than v2.0.0 and versions that are already tagged, so released folders are
 never touched. Then run `npm test`: `test/updateMetadata.test.mjs` **fails** if
-any release folder from v1.4.0 onward has no `update.json`, or if it doesn't match
+any release folder from v2.0.0 onward has no `update.json`, or if it doesn't match
 the files or the changelog — so a release without updater metadata cannot pass.
 
 ### 12. Create the release notes
@@ -281,7 +281,7 @@ under `versions/v1.0.1/`; `dist/` is still ignored; and the remote tag matches.
 
 ## In-app updates
 
-From **v1.4.0**, EasyGit can update itself (Settings → *About EasyGit* →
+From **v2.0.0**, EasyGit can update itself (Settings → *About EasyGit* →
 **Check for updates**; it also checks quietly once after starting).
 
 - **Source:** this Git repository, configured in one place:
@@ -309,11 +309,11 @@ From **v1.4.0**, EasyGit can update itself (Settings → *About EasyGit* →
 - **Testing:** set `EASYGIT_UPDATE_SOURCE=file:///C:/path/to/test-repo` to point a
   build at a local test repository instead of Bitbucket.
 - **First self-updating release:** users on v1.3.0 or older don't have the
-  updater, so they install v1.4.0 once manually; after that, updates are in-app.
+  updater, so they install v2.0.0 once manually; after that, updates are in-app.
 
 ## How users update (manual)
 
-For versions before v1.4.0, or for people without access to the update source,
+For versions before v2.0.0, or for people without access to the update source,
 updating is a manual download-and-run.
 
 ### Installer users

@@ -1,7 +1,7 @@
 // Generate versions/vX.Y.Z/update.json — what the in-app updater reads.
 //
 //   node scripts/make-update-metadata.mjs            (uses package.json version)
-//   node scripts/make-update-metadata.mjs 1.4.0
+//   node scripts/make-update-metadata.mjs 2.0.0
 //
 // Run it AFTER copying the installer + portable into versions/vX.Y.Z/ and writing
 // SHA256SUMS.txt (see docs/RELEASE_PROCESS.md). It hashes the real files, checks
@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 const { validateMetadata, compareVersions } = require('../src/main/updateCore.js');
 
 /** The first release that can update itself (older releases have no update.json). */
-export const FIRST_SELF_UPDATING = '1.4.0';
+export const FIRST_SELF_UPDATING = '2.0.0';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');

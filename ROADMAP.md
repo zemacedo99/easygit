@@ -99,7 +99,7 @@ before being added:
 - [ ] Add macOS (`.dmg`) and Linux (`AppImage`) distributables. The
       electron-builder config for these already exists, but they must be built on
       their own platforms and have not been verified yet.
-- [x] **In-app updates** (from v1.4.0): Settings → *Check for updates* plus one
+- [x] **In-app updates** (from v2.0.0): Settings → *Check for updates* plus one
       quiet check after start; download with progress, SHA-256 verification,
       then a silent in-place NSIS upgrade or a portable self-replace, and restart.
       Source: the release tags of this Bitbucket repository, read with Git and the

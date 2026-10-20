@@ -361,7 +361,7 @@ Everything extra is optional and off by default, so the app stays simple:
 
 ### Updating EasyGit from inside the app
 
-From v1.4.0, EasyGit can update itself. Shortly after it starts it quietly checks
+From v2.0.0, EasyGit can update itself. Shortly after it starts it quietly checks
 for a newer version; if there is one, a small **Update available** label appears
 next to the version in the header. Nothing is installed until you choose to:
 
