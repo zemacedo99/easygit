@@ -11,6 +11,7 @@
 import * as ui from './ui.js';
 import { sortAndFilterRepos } from './repoSort.mjs';
 import * as org from './repoLayout.mjs';
+import { describeMode, prepareDescription } from './describe.mjs';
 import { renderOrganizedList, showGroupNameModal, showMoveToGroupModal, showSuggestionsModal } from './orgList.js';
 
 const api = window.easygit;
@@ -551,10 +552,13 @@ function detailHandlers() {
     onUnstage: (paths) => mutate((id) => api.unstage(id, paths)),
 
     // Save a version from the ready-to-save (staged) changes only.
-    onSaveVersion: () => {
+    onSaveVersion: async () => {
       const repo = currentRepo();
       if (!repo) return;
+      const suggestStaged = () => api.suggestMessage(repo.id, { staged: true });
+      const initial = describeMode(state.settings) === 'manual' ? '' : (await prepareDescription(state.settings, suggestStaged)).message;
       ui.showSaveVersionModal({
+        initial,
         onSave: async (message) => {
           const res = await withBusy('Saving your version…', () => api.commitStaged(repo.id, message));
           if (!res.ok) ui.showToast({ type: 'warn', title: res.error.title, body: res.error.detail });
@@ -563,7 +567,7 @@ function detailHandlers() {
         },
         // Advanced "Save a version" commits the staged changes, so base the
         // suggestion on those.
-        onSuggest: () => api.suggestMessage(repo.id, { staged: true }),
+        onSuggest: suggestStaged,
       });
     },
 
@@ -749,6 +753,7 @@ const FONT_ZOOM = { normal: 1, large: 1.15, larger: 1.3 };
  * original look, so the simple experience is unchanged unless the user opts in.
  */
 function applyAppearance(settings) {
+  ui.setToastAutoClose(!!(settings && settings.autoCloseToasts));
   const theme = settings && settings.theme === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.theme = theme;
   if (api.setZoom) api.setZoom(FONT_ZOOM[(settings && settings.fontSize) || 'normal'] || 1);
@@ -758,7 +763,7 @@ function applyAppearance(settings) {
  * Simple-mode "Upload my changes": asks for a description only when there are
  * local file changes, then runs the combined save + upload via the main process.
  */
-function uploadChanges() {
+async function uploadChanges() {
   const repo = currentRepo();
   if (!repo) return;
   const details = state.details[repo.id];
@@ -774,7 +779,11 @@ function uploadChanges() {
   }
 
   const hasFileChanges = counts.working + counts.staged > 0;
+  const mode = describeMode(state.settings);
+  // Simple-mode upload saves all local changes, so suggest from those.
+  const suggestAll = () => api.suggestMessage(repo.id, { staged: false });
   let uploadHandlers; // defined below; referenced when re-prompting on retry
+  let retried = false;
   const runUpload = async (message) => {
     const res = await withBusy(
       hasFileChanges ? 'Saving and uploading your changes…' : 'Uploading your saved changes…',
@@ -784,29 +793,37 @@ function uploadChanges() {
       // Changes may have appeared on disk since the last check: if the main
       // process now needs a description, ask for it and retry instead of erroring.
       if (res.error && /description/i.test(res.error.title)) {
-        ui.showUploadMessageModal(uploadHandlers);
+        if (mode === 'one-click' && !retried) {
+          retried = true;
+          return runUpload((await prepareDescription(state.settings, suggestAll)).message);
+        }
+        await openUploadModal();
         return;
       }
       ui.showToast({ type: 'error', title: res.error.title, body: res.error.detail });
     } else if (res.noop) {
       ui.showToast({ type: 'info', title: 'Already uploaded', body: res.message });
     } else {
-      ui.showToast({ type: 'success', title: 'Uploaded', body: res.message });
+      const described = message && mode === 'one-click' ? ` Description: “${message}”.` : '';
+      ui.showToast({ type: 'success', title: 'Uploaded', body: `${res.message}${described}` });
     }
     await checkRepo(repo.id, false);
   };
 
-  uploadHandlers = {
-    onSubmit: runUpload,
-    // Simple-mode upload saves all local changes, so suggest from those.
-    onSuggest: () => api.suggestMessage(repo.id, { staged: false }),
+  uploadHandlers = { onSubmit: runUpload, onSuggest: suggestAll };
+  const openUploadModal = async () => {
+    const initial = mode === 'prepared' ? (await prepareDescription(state.settings, suggestAll)).message : '';
+    ui.showUploadMessageModal({ ...uploadHandlers, initial });
   };
 
-  if (hasFileChanges) {
-    ui.showUploadMessageModal(uploadHandlers);
-  } else {
+  if (!hasFileChanges) {
     return runUpload(null); // only saved versions waiting (or nothing) – no description needed
   }
+  if (mode === 'one-click') {
+    // Settings → "Save and upload without asking": EasyGit picks the description.
+    return runUpload((await prepareDescription(state.settings, suggestAll)).message);
+  }
+  return openUploadModal();
 }
 
 /** Download, with a friendly warning first if there are local changes. */

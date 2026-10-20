@@ -61,7 +61,7 @@ function categorize(p) {
 
 /** Turn a file path into a readable phrase, e.g. "LoginScreen.js" -> "login screen". */
 function prettyName(p) {
-  let base = String(p).replace(/\\/g, '/').split('/').pop();
+  let base = String(p).replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop();
   base = base.replace(/\.[^.]+$/, ''); // drop extension
   base = base.replace(/[-_.]+/g, ' '); // separators -> spaces
   base = base.replace(/([a-z0-9])([A-Z])/g, '$1 $2'); // split camelCase
@@ -82,6 +82,23 @@ const BROAD = {
   app: 'Update project files',
   other: 'Update project files',
 };
+
+const VERBS = [['Add', ['added', 'untracked']], ['Update', null], ['Remove', ['deleted']]];
+
+/** "Add login screen and update readme" for 2–3 files, or null if too long. */
+function nameFiles(files) {
+  const parts = [];
+  for (const [verb, types] of VERBS) {
+    const names = files
+      .filter((f) => (types ? types.includes(f.type) : !['added', 'untracked', 'deleted'].includes(f.type)))
+      .map((f) => prettyName(f.path));
+    if (!names.length) continue;
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    parts.push(`${parts.length ? verb.toLowerCase() : verb} ${list}`);
+  }
+  const message = parts.join(' and ');
+  return message && message.length <= 72 ? message : null;
+}
 
 /**
  * Suggest a friendly change description.
@@ -111,7 +128,14 @@ function suggestCommitMessage(files) {
   }
 
   // Multiple files: reason about the mix of categories.
-  const cats = new Set(files.map((f) => categorize(f.path)));
+  const all = files.map((f) => categorize(f.path));
+  // A few files that aren't all in one known category: name them, so one
+  // minor category (e.g. a README edit) can't hide the real work.
+  if (files.length <= 3 && all.includes('other')) {
+    const named = nameFiles(files);
+    if (named) return named;
+  }
+  const cats = new Set(all);
   cats.delete('other'); // don't let unclassified files dominate
   if (cats.size === 0) cats.add('other');
 

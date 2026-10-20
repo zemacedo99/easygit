@@ -18,6 +18,7 @@ import {
   LOCAL_GROUP_ORDER,
 } from './labels.js';
 import { releasesNewestFirst, formatReleaseDate } from './changelog.mjs';
+import { autoClosesType, armAutoClose } from './toastTimer.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Tiny DOM helper                                                     */
@@ -57,26 +58,53 @@ export function h(tag, attrs = {}, children = []) {
  */
 const MAX_TOASTS = 5;
 
+/** Settings → "Automatically close notifications" (off: everything stays). */
+let toastAutoClose = false;
+export function setToastAutoClose(on) {
+  toastAutoClose = !!on;
+}
+
+/** Each notification's own close function (cancels its timer too). */
+const toastDismissers = new WeakMap();
+
+function dismissToast(toast) {
+  const dismiss = toastDismissers.get(toast);
+  if (dismiss) dismiss();
+  else toast.remove();
+}
+
 export function showToast({ type = 'info', title, body = '' }) {
   const container = document.getElementById('toast-container');
+  let timer = null;
+  const dismiss = () => {
+    if (timer) timer.cancel();
+    toast.remove();
+    refreshClearAll(container);
+  };
   const toast = h('div', { className: `toast ${type}` }, [
     h('button', {
       className: 'toast-close',
       title: 'Dismiss',
       'aria-label': 'Dismiss',
-      onClick: () => {
-        toast.remove();
-        refreshClearAll(container);
-      },
+      onClick: dismiss,
     }, '×'),
     h('div', { className: 'toast-title', text: title }),
     body ? h('div', { className: 'toast-body', text: body }) : null,
   ]);
-  // Notifications stay until the user closes them (no auto-dismiss). Cap the
-  // count so they can't pile up forever – drop the oldest beyond the limit.
+  toastDismissers.set(toast, dismiss);
+  // By default notifications stay until the user closes them. With auto-close
+  // on, success/info ones close after a few seconds (paused while hovered);
+  // warnings and errors always stay.
+  if (toastAutoClose && autoClosesType(type)) {
+    timer = armAutoClose(dismiss);
+    toast.classList.add('auto-close');
+    toast.addEventListener('mouseenter', () => timer.pause());
+    toast.addEventListener('mouseleave', () => timer.resume());
+  }
+  // Cap the count so they can't pile up forever – drop the oldest beyond the limit.
   container.appendChild(toast);
   const toasts = container.querySelectorAll('.toast');
-  for (let i = 0; i < toasts.length - MAX_TOASTS; i++) toasts[i].remove();
+  for (let i = 0; i < toasts.length - MAX_TOASTS; i++) dismissToast(toasts[i]);
   refreshClearAll(container);
 }
 
@@ -88,7 +116,7 @@ function refreshClearAll(container) {
     clear = h('button', {
       className: 'toast-clear-all',
       onClick: () => {
-        container.querySelectorAll('.toast').forEach((t) => t.remove());
+        container.querySelectorAll('.toast').forEach((t) => dismissToast(t));
         refreshClearAll(container);
       },
     }, 'Clear all');
@@ -941,11 +969,13 @@ function renderSimpleFlow(repo, details, handlers) {
  * @param {(() => Promise<{ok:boolean, message?:string, error?:string}>)|null} onSuggest
  * @returns {{ wrapper: HTMLElement, textarea: HTMLElement }}
  */
-function buildDescribeField(labelText, onSuggest) {
+function buildDescribeField(labelText, onSuggest, initial = '') {
   const textarea = h('textarea', {
     className: 'input',
     placeholder: 'For example: Updated the homepage text',
   });
+  // Settings → "Automatically prepare the description": already filled in, still editable.
+  if (initial) textarea.value = initial;
   const status = h('div', { className: 'suggest-status', hidden: true });
 
   const headerChildren = [h('label', { text: labelText })];
@@ -997,7 +1027,9 @@ function buildDescribeField(labelText, onSuggest) {
             status.textContent =
               res && res.error === 'none'
                 ? 'No changes found to describe.'
-                : 'EasyGit could not inspect your changes. You can still write the description yourself.';
+                : res && res.error === 'nothing-ready'
+                  ? 'Nothing is ready to save yet. Choose the changes to save first, then try again.'
+                  : 'EasyGit could not inspect your changes. You can still write the description yourself.';
           }
         },
       },
@@ -1021,7 +1053,8 @@ function buildDescribeField(labelText, onSuggest) {
 export function showSaveVersionModal(handlers) {
   const onSave = typeof handlers === 'function' ? handlers : handlers.onSave;
   const onSuggest = typeof handlers === 'function' ? null : handlers.onSuggest;
-  const { wrapper, textarea } = buildDescribeField('Short description', onSuggest);
+  const initial = typeof handlers === 'function' ? '' : handlers.initial;
+  const { wrapper, textarea } = buildDescribeField('Short description', onSuggest, initial);
 
   const close = openModal({
     title: 'Save a version',
@@ -1058,7 +1091,8 @@ export function showSaveVersionModal(handlers) {
 export function showUploadMessageModal(handlers) {
   const onUpload = typeof handlers === 'function' ? handlers : handlers.onSubmit;
   const onSuggest = typeof handlers === 'function' ? null : handlers.onSuggest;
-  const { wrapper, textarea } = buildDescribeField('Describe what you changed', onSuggest);
+  const initial = typeof handlers === 'function' ? '' : handlers.initial;
+  const { wrapper, textarea } = buildDescribeField('Describe what you changed', onSuggest, initial);
 
   const close = openModal({
     title: 'Upload my changes',
@@ -1551,6 +1585,7 @@ export function showSettingsModal(settings, about, onChange) {
     ]),
   ]);
   function syncOrganization() {
+    if (rows.autoCommitMessage) describeOptions.hidden = !current.autoCommitMessage;
     if (!rows.organizeRepos) return; // still building
     orgOptions.hidden = !current.organizeRepos;
     // Editing and suggestions only make sense while groups are shown.
@@ -1561,6 +1596,39 @@ export function showSettingsModal(settings, about, onChange) {
       rows[key].row.title = off ? 'Turn on “Show projects in groups” first' : '';
     }
   }
+
+  // A labelled one-line text setting (saved shortly after typing stops).
+  const textSetting = (key, title, desc, placeholder) => {
+    const input = h('input', { className: 'input setting-input', type: 'text', maxlength: '120', placeholder });
+    input.value = current[key] || '';
+    let pending = null;
+    const save = () => {
+      clearTimeout(pending);
+      if ((current[key] || '') === input.value.trim()) return;
+      current[key] = input.value.trim();
+      onChange({ ...current });
+    };
+    input.addEventListener('input', () => {
+      clearTimeout(pending);
+      pending = setTimeout(save, 400);
+    });
+    input.addEventListener('change', save);
+    const row = h('label', { className: 'setting-row setting-row-text' }, [
+      h('div', { className: 'setting-grow' }, [
+        h('div', { className: 'setting-title', text: title }),
+        h('div', { className: 'setting-desc', text: desc }),
+        input,
+      ]),
+    ]);
+    rows[key] = { row, input };
+    return row;
+  };
+
+  // "Saving and uploading": optional help with the description of your changes.
+  const describeOptions = h('div', { className: 'settings-nested' }, [
+    textSetting('commitDefaultMessage', 'Default description (optional)', 'Always use this text. Leave it empty to describe your actual changes.', 'For example: Update project files'),
+    toggle('autoUploadNoPrompt', 'Save and upload without asking', '“Upload my changes” saves and uploads in one click. EasyGit chooses the description for you: your default above, or one based on the files you changed.'),
+  ]);
 
   // A labelled dropdown setting (text on the left, choices on the right).
   const choice = (key, title, desc, options, fallback) => {
@@ -1591,6 +1659,11 @@ export function showSettingsModal(settings, about, onChange) {
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
       toggle('showVSCode', 'Show “Open in VS Code” button', 'Open this project in your installed Visual Studio Code editor.'),
+      h('div', { className: 'settings-section', text: 'Saving and uploading' }),
+      toggle('autoCommitMessage', 'Automatically prepare the description', 'When you upload or save, the description of your changes is already filled in. You can still edit it, or use ✨ Suggest for a new one.'),
+      describeOptions,
+      h('div', { className: 'settings-section', text: 'Notifications' }),
+      toggle('autoCloseToasts', 'Automatically close notifications', 'Success and information messages disappear after a few seconds. Warnings and errors stay until you close them.'),
       h('div', { className: 'settings-section', text: 'Your repository list' }),
       toggle('organizeRepos', 'Organize your repository list', 'Optional: your own order and groups for the list on the left. Only changes how EasyGit shows the list — your folders on disk are never moved or renamed.'),
       orgOptions,

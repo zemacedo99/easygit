@@ -322,11 +322,16 @@ async function getRecentHistory(repoPath, limit = 5) {
  * into three buckets so the UI can show "this computer" vs "ready to save" vs
  * "needs attention".
  *
+ * @param {string} repoPath
+ * @param {{untrackedFiles?: boolean}} [options]  untrackedFiles: list every new
+ *   file inside new folders (by default Git shows a new folder as one "folder/" entry)
  * @returns {Promise<{ok: boolean, staged: object[], working: object[], conflicted: object[], errorCode: string|null}>}
  *   staged/working items: { path, type, orig? }   conflicted items: { path }
  */
-async function getDetailedStatus(repoPath) {
-  const res = await runGit(repoPath, ['status', '--porcelain=v1', '-z']);
+async function getDetailedStatus(repoPath, options = {}) {
+  const args = ['status', '--porcelain=v1', '-z'];
+  if (options.untrackedFiles) args.push('--untracked-files=all');
+  const res = await runGit(repoPath, args);
   if (!res.ok) return { ok: false, staged: [], working: [], conflicted: [], errorCode: res.errorCode };
 
   const staged = [];

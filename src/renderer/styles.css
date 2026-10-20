@@ -1688,3 +1688,13 @@ textarea.input {
   padding: 1px 8px;
   color: var(--primary);
 }
+
+/* Settings: one-line text option (e.g. default description) */
+.setting-row-text {
+  cursor: default;
+}
+.setting-input {
+  margin-top: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+}

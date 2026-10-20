@@ -652,18 +652,22 @@ async function uploadChanges(id, message) {
  * @param {object} [options]
  * @param {boolean} [options.staged]  Base it on staged changes only (advanced).
  * @returns {Promise<{ok: boolean, message?: string, error?: string}>}
- *   error: 'not-found' | 'read' | 'none'
+ *   error: 'not-found' | 'read' | 'none' | 'nothing-ready' (staged requested,
+ *   but only not-yet-ready changes exist)
  */
 async function suggestMessage(id, options = {}) {
   const repo = findById(id);
   if (!repo) return { ok: false, error: 'not-found' };
 
-  const detailed = await git.getDetailedStatus(repo.path);
+  // List each new file inside new folders: otherwise Git reports a new folder as
+  // a single "folder/" entry and the suggestion can't see what was added.
+  const detailed = await git.getDetailedStatus(repo.path, { untrackedFiles: true });
   if (!detailed.ok) return { ok: false, error: 'read' };
 
   let files;
   if (options.staged) {
     files = detailed.staged.slice();
+    if (files.length === 0 && detailed.working.length > 0) return { ok: false, error: 'nothing-ready' };
   } else {
     // All local changes that will be uploaded (working + staged), de-duped.
     const byPath = new Map();
@@ -704,6 +708,11 @@ const DEFAULT_SETTINGS = {
   orgGroups: false, // show projects in collapsible groups (EasyGit-only)
   orgCustomGroups: false, // create / rename / delete groups, move projects between them
   orgSuggestGroups: false, // suggest groups from shared parent folders
+  // Saving and uploading – all OFF: EasyGit asks for the description as before.
+  autoCommitMessage: false, // fill in the description automatically (editable)
+  commitDefaultMessage: '', // optional fixed description ('' = describe the actual changes)
+  autoUploadNoPrompt: false, // "Upload my changes" saves + uploads without asking
+  autoCloseToasts: false, // success/info notifications close after a few seconds
   theme: 'dark', // 'dark' | 'light'
   fontSize: 'normal', // 'normal' | 'large' | 'larger'
 };
