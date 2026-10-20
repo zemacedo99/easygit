@@ -3,7 +3,7 @@
 This document describes how EasyGit is released, so a new release can be produced
 consistently without re-explaining the steps each time.
 
-The current latest release is **`v1.0.0`**.
+The current latest release is **`v1.3.0`**.
 
 ---
 
@@ -101,6 +101,28 @@ npm version 1.0.1 --no-git-tag-version
 > `package-lock.json` without creating its own Git tag or commit (we create the
 > tag ourselves, later, on the correct commit).
 
+### 4a. Update the in-app “What's new” changelog (required, before building)
+
+EasyGit shows its version history inside the app (Settings → **What's new &
+version history**). That list is bundled with the app, so it must be updated
+**before** `npm run dist:win`, or the new build will not mention itself.
+
+1. Add the new release at the **top** of `CHANGELOG` in
+   [`src/renderer/changelog.mjs`](../src/renderer/changelog.mjs): `version`,
+   `date` (the release/tag date, `YYYY-MM-DD`), a one-line `summary`, and
+   `sections` of short, plain-language bullets. Keep it grounded in the release
+   notes you write in step 12 — never invent features.
+2. Update the README **Download the latest version** section to the new version
+   (installer, portable, `SHA256SUMS.txt`, `RELEASE_NOTES.md` links), keeping the
+   older releases listed.
+3. Run `npm test`. `test/changelog.test.mjs` **fails** if the `package.json`
+   version is not the newest changelog entry, if entries are out of order, or if
+   a released `versions/` folder is missing from the changelog — so a forgotten
+   changelog blocks the release.
+
+The running version shown in the header (`EasyGit vX.Y.Z`) comes from the app
+metadata (`app.getVersion()`), so it updates automatically with step 4.
+
 ### 5. Commit any app/code changes first
 
 If this release includes code changes, commit them now (normal commits), so the
@@ -129,7 +151,8 @@ dist/EasyGit-1.0.1-portable.exe
 
 Double-click `dist/win-unpacked/EasyGit.exe` (or the installer) and confirm it
 opens, with no Node.js or terminal required. Check the EasyGit icon appears and
-the main flow works.
+the main flow works. Confirm the header shows the **new version** and that
+⚙ → **What's new & version history** lists it first.
 
 ### 9. Create the new version folder
 
@@ -184,7 +207,7 @@ and describe what changed in this version. Keep the **Requirements** reminders:
 Stage the version folder plus the version bump (adjust to what actually changed):
 
 ```bash
-git add versions/v1.0.1 package.json package-lock.json
+git add versions/v1.0.1 package.json package-lock.json src/renderer/changelog.mjs README.md
 git commit -m "Add v1.0.1 release artifacts"
 ```
 
@@ -286,14 +309,16 @@ Claude should:
 1. **Ask or infer the next version number** (patch / minor / major — see the
    table above). If it's ambiguous, ask.
 2. **Follow this release process** end to end.
-3. **Build the app** with `npm run dist:win`.
-4. **Create the new `versions/vX.Y.Z/` folder** and copy in the installer,
+3. **Update the in-app changelog** (`src/renderer/changelog.mjs`) and the README
+   download links **before building**, and make sure `npm test` passes.
+4. **Build the app** with `npm run dist:win`.
+5. **Create the new `versions/vX.Y.Z/` folder** and copy in the installer,
    portable, `SHA256SUMS.txt`, and `RELEASE_NOTES.md`.
-5. **Commit the release artifacts** with `Add vX.Y.Z release artifacts` (plus the
-   version bump in `package.json` / `package-lock.json`).
-6. **Create and push the new annotated tag** `vX.Y.Z`, pointing at that commit,
+6. **Commit the release artifacts** with `Add vX.Y.Z release artifacts` (plus the
+   version bump, the changelog and the README update).
+7. **Create and push the new annotated tag** `vX.Y.Z`, pointing at that commit,
    and push `master`.
-7. **Report** the tagged commit, the executable paths under `versions/vX.Y.Z/`,
+8. **Report** the tagged commit, the executable paths under `versions/vX.Y.Z/`,
    and the SHA-256 checksums.
 
 Claude should **not** modify previous releases, move old tags, commit `dist/`, or

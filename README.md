@@ -80,6 +80,9 @@ On a Windows desktop, run
 UI harness. It uses an isolated temporary profile and 250 disposable files,
 recycles one test file, and leaves its temporary profile/screenshot path in the
 output for inspection. It never uses your saved projects.
+`scripts/verify-organization-ui.js` (list organization, three restarts) and
+`scripts/verify-header-ui.js` (header version, Settings and version history) work
+the same way.
 
 ## Download the latest version
 
@@ -329,6 +332,11 @@ How it works with search and sorting:
 
 ### Settings (the ⚙ button)
 
+The ⚙ button is in the top-right of the window, next to the main actions, so
+Settings is always available — even before you add any projects. The EasyGit
+version you are running is shown next to the app name (for example
+`EasyGit v1.3.0`).
+
 Everything extra is optional and off by default, so the app stays simple:
 
 - **Show detailed save/upload steps** — turns on the advanced flow.
@@ -336,6 +344,8 @@ Everything extra is optional and off by default, so the app stays simple:
 - **Organize your repository list** — your own order and EasyGit-only groups
   (see above).
 - **Appearance** — a **light theme** and a larger **text size** for readability.
+- **What's new & version history** (under *About EasyGit*) — every EasyGit
+  release, newest first, with what each one added.
 
 ---
 

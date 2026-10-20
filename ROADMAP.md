@@ -40,6 +40,9 @@ complex one*. Everything below "Future ideas" is optional and not yet built.
 
 - [x] **Edit the friendly name** inline from the list (pencil on each card;
       reuses the rename dialog).
+- [x] **Running version in the header** (from the app metadata), **Settings in
+      the header** (available with no projects), and an in-app **What's new &
+      version history** bundled with the app.
 - [ ] **Auto-refresh on a timer** (opt-in), e.g. re-check every N minutes.
 - [x] **Search / filter** the repository list (slim search box, shown when there
       are 2+ projects).
@@ -120,5 +123,6 @@ before being added:
       model). Run with `npm test`.
 - [x] Integration tests against temporary Git repositories for cloning, stash and
       history/diffs; OS integration safety tests and isolated Electron UI harnesses
-      (`scripts/verify-detailed-ui.js`, `scripts/verify-organization-ui.js`).
+      (`scripts/verify-detailed-ui.js`, `scripts/verify-organization-ui.js`,
+      `scripts/verify-header-ui.js`).
 - [ ] Continuous integration to run the tests on each change.
