@@ -69,7 +69,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "EasyGit"
+      "shortcutName": "EasyGit",
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "EasyGit-${version}-portable.${ext}"

@@ -19,12 +19,22 @@
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const storage = require('./storage');
 const repoManager = require('./repoManager');
 const git = require('./gitService');
 const urls = require('./urls');
 const projectTools = require('./projectTools');
+const updateCore = require('./updateCore');
+const updateConfig = require('./updateConfig');
+const { createUpdater } = require('./updater');
+const portableUpdate = require('./portableReplace');
+
+// Started by an older portable EasyGit to put this (verified) version in its place?
+const portableReplaceTarget = portableUpdate.helperTarget(process.argv);
+
+let updater = null;
 
 let mainWindow = null;
 
@@ -58,12 +68,18 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (portableReplaceTarget) {
+    runPortableReplaceHelper(portableReplaceTarget);
+    return;
+  }
   // Persist data in the per-user app data folder.
   storage.init(app.getPath('userData'));
   repoManager.load();
 
+  setupUpdater();
   registerIpcHandlers();
   createWindow();
+  scheduleStartupUpdateCheck();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -73,6 +89,97 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+/* ------------------------------------------------------------------ */
+/* In-app updates (see updater.js / updateConfig.js)                   */
+/* ------------------------------------------------------------------ */
+
+function updatesDir() {
+  return path.join(app.getPath('userData'), 'updates');
+}
+
+function setupUpdater() {
+  const buildKind = updateCore.detectBuildKind({ isPackaged: app.isPackaged, env: process.env });
+  updater = createUpdater({
+    currentVersion: app.getVersion(),
+    buildKind,
+    workDir: updatesDir(),
+    lastCheckedAt: repoManager.getSettings().updateLastCheckedAt || null,
+    onState: (state) => {
+      // Remember the last successful check (shown in Settings).
+      if (state.lastCheckedAt && ['up-to-date', 'available', 'ahead'].includes(state.status)
+        && state.lastCheckedAt !== repoManager.getSettings().updateLastCheckedAt) {
+        repoManager.setSettings({ updateLastCheckedAt: state.lastCheckedAt });
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:state', state);
+    },
+    launch: launchUpdate,
+  });
+  updater.cleanup(); // leftovers from an earlier session
+  if (buildKind === 'portable') portableUpdate.removeLeftover(process.env.PORTABLE_EXECUTABLE_FILE);
+}
+
+/** Start a program detached; resolves once Windows has actually started it. */
+function startDetached(file, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { detached: true, stdio: 'ignore' });
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+/**
+ * Run a VERIFIED update (updater.install re-checks the SHA-256 right before).
+ * Installed: the NSIS installer upgrades in place silently, then starts the new
+ * version itself (--easygit-restart, see build/installer.nsh). Portable: the new
+ * exe replaces the old one after we quit.
+ */
+async function launchUpdate({ kind, file }) {
+  if (kind === 'installed') {
+    await startDetached(file, ['/S', '--updated', '--easygit-restart']);
+  } else if (kind === 'portable') {
+    const target = process.env.PORTABLE_EXECUTABLE_FILE;
+    if (!target) throw new Error('portable path unknown');
+    await startDetached(file, [`${portableUpdate.FLAG}${target}`]);
+  } else {
+    throw new Error('unsupported build');
+  }
+  setTimeout(() => app.quit(), 300);
+}
+
+/** One quiet check per launch, after the window is up (never slows startup). */
+function scheduleStartupUpdateCheck() {
+  const kind = updater.getState().buildKind;
+  if (kind === 'development' && !process.env.EASYGIT_UPDATE_SOURCE) return;
+  if (kind === 'unsupported') return;
+  mainWindow.webContents.once('did-finish-load', () => {
+    setTimeout(() => updater.check(), updateConfig.startupCheckDelayMs);
+  });
+}
+
+/** Portable helper mode: swap the old exe for this verified one, then start it. */
+async function runPortableReplaceHelper(target) {
+  const source = process.env.PORTABLE_EXECUTABLE_FILE;
+  const problem = portableUpdate.checkReplaceRequest({ source, target, stagingRoot: updatesDir() });
+  if (problem) {
+    dialog.showErrorBox('EasyGit update', 'The update could not be applied. Your EasyGit was not changed.');
+    app.exit(1);
+    return;
+  }
+  const result = await portableUpdate.replaceFile({ source, target });
+  if (!result.ok) {
+    dialog.showErrorBox('EasyGit update', `The update could not be applied (${result.reason}). Your previous EasyGit is still in place.`);
+  }
+  try {
+    await startDetached(target, []);
+  } catch (e) {
+    dialog.showErrorBox('EasyGit update', `EasyGit was updated but could not restart. Please start it again from ${target}.`);
+  }
+  app.exit(result.ok ? 0 : 1);
+}
 
 /**
  * All IPC handlers. Each is a thin wrapper that calls repoManager and returns
@@ -97,6 +204,11 @@ function registerIpcHandlers() {
   ipcMain.handle('app:storagePath', async () => repoManager.getStoragePath());
   // The running version: package.json in development, the packaged app's metadata when installed.
   ipcMain.handle('app:version', async () => app.getVersion());
+  // Updates: the renderer can only ask; it never passes URLs, paths or versions.
+  ipcMain.handle('update:getState', async () => updater.getState());
+  ipcMain.handle('update:check', async () => updater.check());
+  ipcMain.handle('update:download', async () => updater.download());
+  ipcMain.handle('update:install', async () => updater.install());
 
   // --- Repository list -----------------------------------------------------
   ipcMain.handle('repos:list', async () => repoManager.listRepos());

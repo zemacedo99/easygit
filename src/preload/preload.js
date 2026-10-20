@@ -27,6 +27,18 @@ contextBridge.exposeInMainWorld('easygit', {
   getStoragePath: () => ipcRenderer.invoke('app:storagePath'),
   getVersion: () => ipcRenderer.invoke('app:version'),
 
+  // In-app updates: no arguments on purpose (the main process decides where
+  // updates come from and verifies them before anything runs).
+  getUpdateState: () => ipcRenderer.invoke('update:getState'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('update:state', listener);
+    return () => ipcRenderer.removeListener('update:state', listener);
+  },
+
   // Repository list
   listRepos: () => ipcRenderer.invoke('repos:list'),
   removeRepo: (id) => ipcRenderer.invoke('repos:remove', id),
