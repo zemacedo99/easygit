@@ -18,7 +18,7 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 function fakeRelease(t, version, { badSums = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-meta-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const inst = crypto.randomBytes(1000);
   const port = crypto.randomBytes(800);
   fs.writeFileSync(path.join(dir, `EasyGit Setup ${version}.exe`), inst);

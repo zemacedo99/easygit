@@ -83,7 +83,7 @@ test('update metadata is validated strictly (malformed, wrong version, unsafe na
 
 test('checksum verification: success, mismatch, wrong size, missing file', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-verify-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const file = path.join(dir, 'x.exe');
   const data = Buffer.from('EasyGit test payload');
   fs.writeFileSync(file, data);
@@ -144,7 +144,7 @@ test('update source comes only from the main-process config', () => {
 
 function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadata = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-updsrc-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const repo = path.join(root, 'src');
   fs.mkdirSync(repo);
   const git = (...args) => execFileSync('git', args, { cwd: repo, windowsHide: true, stdio: 'pipe' });
@@ -172,7 +172,7 @@ function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadat
 
 function updaterFor(t, src, { current = '1.3.0', buildKind = 'installed', source } = {}) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-updwork-'));
-  t.after(() => fs.rmSync(workDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const states = [];
   const launched = [];
   const u = createUpdater({
@@ -268,7 +268,7 @@ test('download failure (source gone mid-way) fails closed with no partial file',
   const src = makeSource(t);
   const { u, launched, workDir } = updaterFor(t, src);
   await u.check();
-  fs.rmSync(src.repo, { recursive: true, force: true });
+  fs.rmSync(src.repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   const s = await u.download();
   assert.equal(s.status, 'error');
   assert.ok(['offline', 'unavailable', 'download', 'access'].includes(s.error.kind), s.error.kind);
@@ -306,7 +306,7 @@ test('portable helper refuses anything but an EasyGit exe, from the update folde
 
 test('portable swap waits for the old exe, replaces it, and rolls back on failure', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-swap-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const source = path.join(dir, 'new.exe');
   const target = path.join(dir, 'EasyGit-1.3.0-portable.exe');
   fs.writeFileSync(source, 'NEW');

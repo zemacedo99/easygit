@@ -13,7 +13,7 @@ const REPOS = ['a', 'b', 'c'].map((id) => ({
 
 function setup(t, saved) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-layout-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const file = path.join(dir, 'repositories.json');
   fs.writeFileSync(file, JSON.stringify(saved, null, 2));
   storage.init(dir);

@@ -54,7 +54,7 @@ test('suggestion failure always has a safe fallback', async () => {
 
 function tempRepo(t, { withRemote = false } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-describe-'));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const dir = path.join(base, 'project');
   let remote = null;
   if (withRemote) {

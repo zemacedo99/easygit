@@ -11,7 +11,7 @@ const tools = require('../src/main/projectTools');
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-detailed-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const run = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
   const write = (file, text) => fs.writeFileSync(path.join(root, file), text);
   run('init', '-q'); run('config', 'user.name', 'Test'); run('config', 'user.email', 'test@example.invalid');

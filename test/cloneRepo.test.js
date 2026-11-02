@@ -47,7 +47,7 @@ before(() => {
 });
 
 after(() => {
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
+  try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch (e) {}
 });
 
 test('cloneRepo: downloads and adds the project', async () => {
