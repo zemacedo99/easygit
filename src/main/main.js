@@ -215,6 +215,8 @@ function registerIpcHandlers() {
   ipcMain.handle('repos:remove', async (_e, id) => repoManager.removeRepo(id));
   ipcMain.handle('repos:removeAll', async () => repoManager.removeAllRepos());
   ipcMain.handle('repos:rename', async (_e, id, name) => repoManager.renameRepo(id, name));
+  // Optional "Show online repository status": re-read configured remotes (local only).
+  ipcMain.handle('repos:refreshRemoteStatus', async () => repoManager.refreshRemoteStatus());
 
   // --- Add (manual) --------------------------------------------------------
   ipcMain.handle('repos:add', async (_e, folderPath) => repoManager.addRepo(folderPath));

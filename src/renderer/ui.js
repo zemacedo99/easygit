@@ -19,6 +19,7 @@ import {
 } from './labels.js';
 import { releasesNewestFirst, formatReleaseDate } from './changelog.mjs';
 import { autoClosesType, armAutoClose } from './toastTimer.mjs';
+import { remoteStatusInfo, onlineProjectLink } from './remoteStatus.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Tiny DOM helper                                                     */
@@ -225,6 +226,16 @@ export function renderRepoList(repos, selectedId, onSelect, checkingIds = new Se
   for (const repo of repos) listEl.appendChild(buildRepoCard(repo, selectedId, onSelect, checkingIds, opts));
 }
 
+/** "🌐 Online repository: host" / "⚪ Only on this computer" (optional setting). */
+function remoteStatusLine(status) {
+  const info = remoteStatusInfo(status);
+  if (!info) return h('span', { className: 'remote-status tone-pending', text: 'Checking online repository…' });
+  return h('span', { className: `remote-status tone-${info.tone}`, title: info.title }, [
+    h('span', { className: 'remote-icon', text: info.icon, 'aria-hidden': 'true' }),
+    ` ${info.text}`,
+  ]);
+}
+
 /**
  * One repository card for the left list (shared by the flat and grouped lists).
  * opts.onMoveToGroup adds a "Move to group" button (only when custom groups are on).
@@ -303,6 +314,7 @@ export function buildRepoCard(repo, selectedId, onSelect, checkingIds = new Set(
           repo.branch || '—',
         ]),
         h('span', { text: formatLastChecked(repo.lastChecked) }),
+        opts.showRemote ? remoteStatusLine(repo.remoteStatus) : null,
       ]),
     ]
   );
@@ -343,6 +355,7 @@ export function renderDetails(repo, details, handlers, settings) {
       h('div', { className: 'details-title' }, [
         h('h2', { text: repo.name }),
         h('p', { className: 'repo-path', text: repo.path }),
+        opts.showRemoteStatus ? remoteDetailLine(repo, details) : null,
       ]),
       h('div', { className: 'details-header-right' }, [
         statusBadge(repo.statusTone, repo.statusLabel),
@@ -364,14 +377,14 @@ export function renderDetails(repo, details, handlers, settings) {
   // remove, open online if known) plus a primary "Check changes". The user
   // should never have to check just to reach these.
   if (!details) {
-    detailsEl.appendChild(utilityRow(repo, null, handlers, 'first'));
+    detailsEl.appendChild(utilityRow(repo, null, handlers, 'first', opts));
     return;
   }
 
   // Repository unavailable (folder moved/deleted or no longer a Git repo):
   // show only the safe utilities, never a misleading empty flow.
   if (details.error || details.status === 'error') {
-    detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck-primary'));
+    detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck-primary', opts));
     return;
   }
 
@@ -387,8 +400,22 @@ export function renderDetails(repo, details, handlers, settings) {
   );
 
   // Utility actions (always available and safe).
-  detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck'));
+  detailsEl.appendChild(utilityRow(repo, details, handlers, 'recheck', opts));
   if (opts.showAdvanced) detailsEl.appendChild(renderStashArea(handlers));
+}
+
+/** Details panel: the remote status, spelled out for the no-remote case. */
+function remoteDetailLine(repo) {
+  const status = repo.remoteStatus;
+  const info = remoteStatusInfo(status);
+  if (!info) return h('p', { className: 'remote-status-detail tone-pending', text: 'Checking online repository…' });
+  const text = info.tone === 'local' ? 'No online repository connected — this project is only on this computer.' : info.text;
+  const children = [h('span', { className: 'remote-icon', text: info.icon, 'aria-hidden': 'true' }), ` ${text}`];
+  // Connected, but not under the name EasyGit uploads/downloads with.
+  if (status.state === 'connected' && !status.remotes.some((r) => r.name === 'origin') && !repo.remoteUrl) {
+    children.push(h('span', { className: 'remote-note', text: ' · Uploading and downloading here need the main online repository (“origin”), which isn’t set up.' }));
+  }
+  return h('p', { className: `remote-status-detail tone-${info.tone}`, title: info.title }, children);
 }
 
 /**
@@ -400,10 +427,10 @@ export function renderDetails(repo, details, handlers, settings) {
  *   'recheck-primary' → "Check again"   (primary, used on the error screen)
  *   'recheck'         → "Check again"   (secondary, alongside the normal flow)
  */
-function utilityRow(repo, details, handlers, mode) {
-  // browserUrl is derived from the stored remoteUrl, so it is non-null exactly
-  // when onOpenRemote (which acts on remoteUrl) will succeed — safe to gate on.
-  const browserUrl = (details && details.browserUrl) || repo.browserUrl;
+function utilityRow(repo, details, handlers, mode, settings) {
+  // The same rule app.js uses to open it, so the button only shows when it works:
+  // the "origin" link, or (with "Show online repository status") another remote.
+  const browserUrl = onlineProjectLink(repo, settings, details);
   const buttons = [];
   if (mode === 'first') {
     buttons.push(actionButton('🔎', 'Check changes', () => handlers.onCheck(false), true));
@@ -1658,6 +1685,7 @@ export function showSettingsModal(settings, about, onChange) {
     body: h('div', { className: 'settings-list' }, [
       toggle('showAdvanced', 'Show detailed save/upload steps', 'Adds the advanced flow: changed files, ready to save, saved versions, and online repository.'),
       toggle('showBranch', 'Show version line details', 'Shows which version line (branch) you are on and lets you switch between them.'),
+      toggle('showRemoteStatus', 'Show online repository status', 'On each project, show whether it is connected to an online repository or only exists on this computer. EasyGit reads the project’s own settings; it doesn’t go online or change anything.'),
       toggle('showVSCode', 'Show “Open in VS Code” button', 'Open this project in your installed Visual Studio Code editor.'),
       h('div', { className: 'settings-section', text: 'Saving and uploading' }),
       toggle('autoCommitMessage', 'Automatically prepare the description', 'When you upload or save, the description of your changes is already filled in. You can still edit it, or use ✨ Suggest for a new one.'),

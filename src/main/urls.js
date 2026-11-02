@@ -79,6 +79,31 @@ function providerName(remoteUrl) {
 }
 
 /**
+ * Where a remote points, for a short label: the host name for web/SSH remotes,
+ * 'local' for a folder on this computer (file:// or a path). Never throws.
+ * @param {string|null} remoteUrl
+ * @returns {{kind: 'web'|'local'|'unknown', host: string|null}}
+ */
+function remoteHost(remoteUrl) {
+  const s = String(remoteUrl || '').trim();
+  if (!s) return { kind: 'unknown', host: null };
+  if (/^file:\/\//i.test(s) || /^[A-Za-z]:[\\/]/.test(s) || /^(\\\\|\/|\.{1,2}[\\/])/.test(s)) {
+    return { kind: 'local', host: null };
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+    try {
+      const host = new URL(s).hostname;
+      return host ? { kind: 'web', host } : { kind: 'unknown', host: null };
+    } catch (e) {
+      return { kind: 'unknown', host: null };
+    }
+  }
+  const scp = /^(?:[^@\s/]+@)?([A-Za-z0-9.-]+):[^\s]/.exec(s); // git@host:team/repo.git
+  if (scp && scp[1].includes('.')) return { kind: 'web', host: scp[1] };
+  return { kind: 'unknown', host: null };
+}
+
+/**
  * Does this look like a Git repository link we can clone? Accepts the common
  * shapes: https://, http://, ssh://, git://, and scp-style user@host:path.
  * @param {string|null} url
@@ -130,4 +155,5 @@ function suggestFolderName(remoteUrl) {
   return clean || 'new-project';
 }
 
-module.exports = { toBrowserUrl, providerName, isProbablyGitUrl, sanitizeFolderName, suggestFolderName };
+module.exports = {
+  remoteHost, toBrowserUrl, providerName, isProbablyGitUrl, sanitizeFolderName, suggestFolderName };

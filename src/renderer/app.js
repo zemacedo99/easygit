@@ -12,6 +12,7 @@ import * as ui from './ui.js';
 import { sortAndFilterRepos } from './repoSort.mjs';
 import * as org from './repoLayout.mjs';
 import { describeMode, prepareDescription } from './describe.mjs';
+import { onlineProjectLink } from './remoteStatus.mjs';
 import { renderOrganizedList, showGroupNameModal, showMoveToGroupModal, showSuggestionsModal } from './orgList.js';
 
 const api = window.easygit;
@@ -61,6 +62,17 @@ async function init() {
   subscribeProgress();
   wireGlobalButtons();
   await refreshRepos();
+  if (state.settings.showRemoteStatus) refreshRemoteStatus(); // background, local only
+}
+
+/** Optional setting: re-read which projects have an online repository configured. */
+async function refreshRemoteStatus() {
+  try {
+    state.repos = await api.refreshRemoteStatus();
+    rerender();
+  } catch (e) {
+    /* non-fatal: the cards just keep their last known status */
+  }
 }
 
 /** Reload the persisted repo list and re-render. */
@@ -91,6 +103,7 @@ function rerender() {
       query: state.filter,
       onRename: renameRepoById,
       onRemove: removeRepoById,
+      showRemote: !!state.settings.showRemoteStatus,
     });
   }
   const repo = currentRepo();
@@ -150,6 +163,7 @@ function renderOrganized(flags, sortBy) {
       onRename: renameRepoById,
       onRemove: removeRepoById,
       onMoveToGroup: flags.customGroups ? moveRepoToGroup : null,
+      showRemote: !!state.settings.showRemoteStatus,
     },
     dragEnabled: custom && !searching,
     canReorder,
@@ -585,7 +599,7 @@ function detailHandlers() {
     onOpenRemote: async () => {
       const r = currentRepo();
       if (!r) return;
-      const res = await api.openRemote(r.remoteUrl);
+      const res = await api.openRemote(r.remoteUrl || onlineProjectLink(r, state.settings, state.details[r.id]));
       if (!res.ok) ui.showToast({ type: 'warn', title: 'No online repository', body: res.error || '' });
     },
 
@@ -739,7 +753,9 @@ function openSettings() {
       changes.sortBy = 'custom';
       changes.sortFallback = previous === 'custom' ? 'attention' : previous;
     }
+    const remoteWasOn = !!state.settings.showRemoteStatus;
     state.settings = await api.setSettings(changes);
+    if (!remoteWasOn && state.settings.showRemoteStatus) refreshRemoteStatus();
     applyAppearance(state.settings);
     rerender();
   });

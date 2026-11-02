@@ -1698,3 +1698,29 @@ textarea.input {
   padding: 7px 10px;
   font-size: 13px;
 }
+
+/* Optional "Show online repository status" (cards + details) */
+.remote-status {
+  white-space: nowrap;
+}
+.remote-status.tone-online,
+.remote-status-detail.tone-online {
+  color: var(--tone-upload);
+}
+.remote-status.tone-local,
+.remote-status-detail.tone-local,
+.remote-status.tone-pending,
+.remote-status-detail.tone-pending {
+  color: var(--text-dim);
+}
+.remote-status.tone-unknown,
+.remote-status-detail.tone-unknown {
+  color: var(--tone-changes);
+}
+.remote-status-detail {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+.remote-note {
+  color: var(--text-faint);
+}

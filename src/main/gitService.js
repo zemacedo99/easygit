@@ -234,6 +234,33 @@ async function getRemoteUrl(repoPath) {
 }
 
 /**
+ * Parse `git remote -v` output into one entry per remote (any name, not just
+ * "origin"), in Git's order. Prefers the fetch URL when fetch/push differ.
+ * @param {string} output
+ * @returns {Array<{name: string, url: string}>}
+ */
+function parseRemotes(output) {
+  const byName = new Map();
+  for (const line of String(output || '').split(/\r?\n/)) {
+    const m = /^(\S+)\s+(.+?)\s+\((fetch|push)\)$/.exec(line.trim());
+    if (!m) continue;
+    if (!byName.has(m[1]) || m[3] === 'fetch') byName.set(m[1], m[2]);
+  }
+  return [...byName].map(([name, url]) => ({ name, url }));
+}
+
+/**
+ * Every configured remote, read locally with `git remote -v` (no network).
+ * Read-only: never adds, changes or removes a remote.
+ * @returns {Promise<{ok: boolean, remotes: Array<{name: string, url: string}>, errorCode: string|null}>}
+ */
+async function listRemotes(repoPath) {
+  const res = await runGit(repoPath, ['remote', '-v']);
+  if (!res.ok) return { ok: false, remotes: [], errorCode: res.errorCode };
+  return { ok: true, remotes: parseRemotes(res.stdout), errorCode: null };
+}
+
+/**
  * Porcelain status -> list of changed files with a simple, friendly category.
  * @returns {Promise<{ok: boolean, files: Array<{path: string, kind: string}>, errorCode: string|null}>}
  */
@@ -647,6 +674,8 @@ module.exports = {
   isGitRepo,
   getCurrentBranch,
   getRemoteUrl,
+  listRemotes,
+  parseRemotes,
   getLocalChanges,
   getDetailedStatus,
   getAheadBehind,

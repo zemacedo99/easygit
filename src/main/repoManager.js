@@ -74,6 +74,64 @@ function findById(id) {
   return repos.find((r) => r.id === id);
 }
 
+// ---------------------------------------------------------------------------
+// Optional "Show online repository status" (Settings, off by default).
+// Answers only "is a remote configured?" from the project's own Git settings
+// (`git remote -v`, no network). It never adds, changes or removes remotes, and
+// it says nothing about whether the online repository is reachable.
+// ---------------------------------------------------------------------------
+
+/** Never keep a user name / token that a remote URL may embed. */
+function withoutCredentials(web) {
+  if (!web) return null;
+  try {
+    const u = new URL(web);
+    u.username = '';
+    u.password = '';
+    return u.toString().replace(/\/$/, '');
+  } catch (e) {
+    return null;
+  }
+}
+
+function remoteStatusEnabled() {
+  return !!getSettings().showRemoteStatus;
+}
+
+/**
+ * @returns {Promise<{state: 'connected'|'local-only'|'unknown', reason?: string,
+ *   remotes: Array<{name, kind, host, browserUrl}>, primary: string|null, checkedAt: string}>}
+ */
+async function readRemoteStatus(repo) {
+  const checkedAt = new Date().toISOString();
+  if (!repo.path || !fs.existsSync(repo.path)) return { state: 'unknown', reason: 'missing', remotes: [], primary: null, checkedAt };
+  const res = await git.listRemotes(repo.path);
+  if (!res.ok) return { state: 'unknown', reason: 'unreadable', remotes: [], primary: null, checkedAt };
+  const remotes = res.remotes.slice(0, 20).map(({ name, url }) => {
+    const where = urls.remoteHost(url);
+    return { name: String(name).slice(0, 100), kind: where.kind, host: where.host, browserUrl: withoutCredentials(urls.toBrowserUrl(url)) };
+  });
+  // The one EasyGit shows first: "origin" if present, otherwise the first one.
+  const primary = (remotes.find((r) => r.name === 'origin') || remotes[0] || {}).name || null;
+  return { state: remotes.length ? 'connected' : 'local-only', remotes, primary, checkedAt };
+}
+
+/**
+ * Re-read the remote status of some (or all) repositories and save it.
+ * Does nothing while the setting is off, so no extra Git work happens.
+ * @param {string[]} [ids]
+ */
+async function refreshRemoteStatus(ids) {
+  if (!remoteStatusEnabled()) return listRepos();
+  const wanted = Array.isArray(ids) ? new Set(ids) : null;
+  for (const repo of repos) {
+    if (wanted && !wanted.has(repo.id)) continue;
+    repo.remoteStatus = await readRemoteStatus(repo);
+  }
+  persist();
+  return listRepos();
+}
+
 /**
  * Add a single local folder as a repository, after validating it is a git repo.
  * @param {string} folderPath
@@ -106,6 +164,7 @@ async function addRepo(folderPath) {
     lastStatus: Status.UNKNOWN,
     lastChecked: null,
   };
+  if (remoteStatusEnabled()) repo.remoteStatus = await readRemoteStatus(repo);
   repos.push(repo);
   persist();
   return { ok: true, repo: decorate(repo) };
@@ -212,6 +271,7 @@ async function cloneRepo(options = {}) {
     lastStatus: Status.UNKNOWN,
     lastChecked: null,
   };
+  if (remoteStatusEnabled()) repo.remoteStatus = await readRemoteStatus(repo);
   repos.push(repo);
   persist();
   return { ok: true, repo: decorate(repo) };
@@ -393,6 +453,7 @@ async function checkStatus(id, options = {}) {
   if (!repoCheck.isRepo) {
     repo.lastStatus = Status.ERROR;
     repo.lastChecked = new Date().toISOString();
+    if (remoteStatusEnabled()) repo.remoteStatus = await readRemoteStatus(repo);
     persist();
     const err = friendlyError(repoCheck.errorCode);
     return {
@@ -415,6 +476,7 @@ async function checkStatus(id, options = {}) {
   const remoteUrl = await git.getRemoteUrl(repo.path);
   repo.remoteUrl = remoteUrl || null;
   repo.branch = branch;
+  if (remoteStatusEnabled()) repo.remoteStatus = await readRemoteStatus(repo);
 
   // Detailed local status: changed (working), ready-to-save (staged), conflicts.
   const detailed = await git.getDetailedStatus(repo.path);
@@ -708,6 +770,7 @@ const DEFAULT_SETTINGS = {
   orgGroups: false, // show projects in collapsible groups (EasyGit-only)
   orgCustomGroups: false, // create / rename / delete groups, move projects between them
   orgSuggestGroups: false, // suggest groups from shared parent folders
+  showRemoteStatus: false, // show "online repository" vs "only on this computer"
   // Saving and uploading – all OFF: EasyGit asks for the description as before.
   autoCommitMessage: false, // fill in the description automatically (editable)
   commitDefaultMessage: '', // optional fixed description ('' = describe the actual changes)
@@ -891,6 +954,7 @@ module.exports = {
   getRepoPath,
   getSettings,
   setSettings,
+  refreshRemoteStatus,
   getLayout,
   setLayout,
   getStoragePath: storage.getStoragePath,

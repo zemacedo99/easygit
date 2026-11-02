@@ -82,7 +82,8 @@ recycles one test file, and leaves its temporary profile/screenshot path in the
 output for inspection. It never uses your saved projects.
 `scripts/verify-organization-ui.js` (list organization, three restarts) and
 `scripts/verify-header-ui.js` (header version, Settings and version history) and
-`scripts/verify-describe-ui.js` (upload descriptions, ✨ Suggest, notifications) work
+`scripts/verify-describe-ui.js` (upload descriptions, ✨ Suggest, notifications) and
+`scripts/verify-remote-ui.js` (online repository status) work
 the same way.
 
 ## Download the latest version
@@ -342,6 +343,15 @@ Everything extra is optional and off by default, so the app stays simple:
 
 - **Show detailed save/upload steps** — turns on the advanced flow.
 - **Show version line details** — shows/switches branches.
+- **Show online repository status** — on each project, show whether it is
+  connected to an online repository (with its host, e.g.
+  `Online repository: git.example.com`, and "+N more" when there are
+  several) or **only on this computer**. EasyGit reads the project's own Git
+  settings (`git remote -v`, every remote, whatever its name) — it doesn't go
+  online, and it never adds, changes or removes anything. "Connected" means an
+  online repository is *configured*, not that it is reachable or up to date.
+  *Open online project* only appears when there is a web link to open. Off by
+  default.
 - **Saving and uploading** — optionally have the description of your changes
   **prepared automatically** (still editable), with an optional **default
   description**; and, under it, **Save and upload without asking**, so

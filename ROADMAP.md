@@ -105,6 +105,8 @@ before being added:
       Source: the release tags of this Bitbucket repository, read with Git and the
       user's existing sign-in (no stored credentials). See
       [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md#in-app-updates).
+- [x] Optional **online repository status** on each project (configured remote
+      vs. only on this computer), read locally from Git; never changes remotes.
 - [ ] **Code-sign** the installer/portable (a signed publisher would add a second
       integrity check and stop SmartScreen warnings).
 - [ ] An update source that doesn't require Bitbucket access (e.g. an internal

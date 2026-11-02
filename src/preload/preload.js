@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('easygit', {
   removeRepo: (id) => ipcRenderer.invoke('repos:remove', id),
   removeAllRepos: () => ipcRenderer.invoke('repos:removeAll'),
   renameRepo: (id, name) => ipcRenderer.invoke('repos:rename', id, name),
+  refreshRemoteStatus: () => ipcRenderer.invoke('repos:refreshRemoteStatus'),
 
   // Add
   addRepo: (folderPath) => ipcRenderer.invoke('repos:add', folderPath),
