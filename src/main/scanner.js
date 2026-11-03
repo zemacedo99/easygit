@@ -298,9 +298,9 @@ async function scan(options = {}) {
       if (isRepo) {
         const norm = normalizePath(dir);
         if (!foundMap.has(norm)) foundMap.set(norm, { name: path.basename(dir), path: dir });
-        // Do not descend into a repository (avoids listing submodules / build
-        // output inside it as separate repos).
-        continue;
+        // Keep walking inside it: projects are often kept inside another
+        // project's folder (nested repositories, submodules). The `.git` folder
+        // itself, hidden folders and build/dependency output are still skipped below.
       }
     }
 
