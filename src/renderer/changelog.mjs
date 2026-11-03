@@ -19,6 +19,28 @@
  */
 export const CHANGELOG = [
   {
+    version: '2.1.0',
+    date: '2026-11-03',
+    summary: 'See which projects are connected online, and Auto-find now finds projects inside other projects.',
+    sections: [
+      {
+        heading: 'Online repository status (optional, off by default)',
+        items: [
+          'On each project, see whether it is connected to an online repository (for example “Online repository: git.example.com”) or is only on this computer',
+          'Projects with several online repositories show them all, whatever they are called',
+          'Read from the project’s own settings: EasyGit doesn’t go online and never changes anything',
+          '“Open online project” only appears when there is something to open',
+        ],
+      },
+      {
+        heading: 'Fixes',
+        items: [
+          'Auto-find now finds projects kept inside another project’s folder, including submodule-style projects',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-10-20',
     summary: 'EasyGit can now update itself, plus faster uploads and an always-available Settings.',
