@@ -47,17 +47,24 @@ test('the release script refuses mismatched checksums or a missing changelog ent
   assert.throws(() => buildMetadata({ dir: ok.dir, version: '1.4.0', changelog: entry('1.3.0') }), /changelog/);
 });
 
+// Executables are published as GitHub Release assets and are not committed, so
+// this guard checks a release folder only while it holds the built executables
+// (i.e. while a release is being prepared locally).
 test('every self-updating release folder ships a valid update.json matching its files (release guard)', () => {
-  const folders = fs.readdirSync(path.join(root, 'versions')).filter((d) => /^v\d+\.\d+\.\d+$/.test(d));
+  const versionsDir = path.join(root, 'versions');
+  const folders = fs.existsSync(versionsDir) ? fs.readdirSync(versionsDir).filter((d) => /^v\d+\.\d+\.\d+$/.test(d)) : [];
   for (const folder of folders) {
     const version = folder.slice(1);
     const metaFile = path.join(root, 'versions', folder, 'update.json');
     if (compareVersions(version, FIRST_SELF_UPDATING) < 0) continue; // released before the updater existed
+    const hasExecutables = fs.readdirSync(path.join(versionsDir, folder)).some((f) => f.endsWith('.exe'));
+    if (!hasExecutables && !fs.existsSync(metaFile)) continue; // published on GitHub Releases only
     assert.ok(fs.existsSync(metaFile), `versions/${folder}/update.json is missing — run: node scripts/make-update-metadata.mjs ${version}`);
     const check = validateMetadata(fs.readFileSync(metaFile, 'utf8'), version);
     assert.ok(check.ok, `versions/${folder}/update.json: ${check.reason}`);
     for (const key of ['installer', 'portable']) {
       const file = path.join(root, 'versions', folder, check.metadata[key].file);
+      if (!hasExecutables) continue; // the exe lives on the GitHub Release
       assert.equal(sha(fs.readFileSync(file)), check.metadata[key].sha256, `${file} checksum`);
     }
     assert.deepEqual(check.metadata.changelog, CHANGELOG.find((r) => r.version === version), 'update.json "What\'s new" must match changelog.mjs');

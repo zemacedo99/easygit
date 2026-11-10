@@ -1,6 +1,6 @@
 'use strict';
 // In-app updates: pure logic + the real Git transport against a LOCAL repository
-// (no network, no Bitbucket). The fixture repo looks like the EasyGit repo: a
+// (no network). The fixture repo looks like the EasyGit repo: a
 // release tag vX.Y.Z containing versions/vX.Y.Z/{installer, portable, update.json}.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -142,7 +142,7 @@ test('update source comes only from the main-process config', () => {
 
 /* --------------------- real Git transport, local repo --------------------- */
 
-function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadata = true } = {}) {
+function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadata = true, withExecutables = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-updsrc-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const repo = path.join(root, 'src');
@@ -158,8 +158,10 @@ function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadat
   fs.mkdirSync(dir, { recursive: true });
   const installer = crypto.randomBytes(300 * 1024);
   const portableExe = crypto.randomBytes(200 * 1024);
-  fs.writeFileSync(path.join(dir, `EasyGit Setup ${version}.exe`), installer);
-  fs.writeFileSync(path.join(dir, `EasyGit-${version}-portable.exe`), portableExe);
+  if (withExecutables) {
+    fs.writeFileSync(path.join(dir, `EasyGit Setup ${version}.exe`), installer);
+    fs.writeFileSync(path.join(dir, `EasyGit-${version}-portable.exe`), portableExe);
+  }
   if (withMetadata) {
     fs.writeFileSync(path.join(dir, 'update.json'), JSON.stringify(goodMeta(version, {
       installer: { file: `EasyGit Setup ${version}.exe`, size: installer.length, sha256: corruptChecksum ? 'f'.repeat(64) : sha(installer) },
@@ -170,7 +172,7 @@ function makeSource(t, { version = '1.4.0', corruptChecksum = false, withMetadat
   return { url: pathToFileURL(repo).href, installer, portableExe, root, repo };
 }
 
-function updaterFor(t, src, { current = '1.3.0', buildKind = 'installed', source } = {}) {
+function updaterFor(t, src, { current = '1.3.0', buildKind = 'installed', source, fetchAsset, assetUrl } = {}) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'easygit-updwork-'));
   t.after(() => fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const states = [];
@@ -182,6 +184,8 @@ function updaterFor(t, src, { current = '1.3.0', buildKind = 'installed', source
     source: () => source || src.url,
     onState: (s) => states.push(s.status),
     launch: (a) => { launched.push(a); },
+    ...(fetchAsset ? { fetchAsset } : {}),
+    ...(assetUrl ? { assetUrl } : {}),
   });
   return { u, states, launched, workDir };
 }
@@ -254,6 +258,45 @@ test('a staged file tampered with before install is refused', async (t) => {
   assert.equal(s.status, 'error');
   assert.equal(s.error.kind, 'checksum');
   assert.equal(launched.length, 0);
+});
+
+test('GitHub Release assets: download URL is built only for github.com sources', () => {
+  assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit.git', '2.2.0', 'EasyGit Setup 2.2.0.exe'),
+    'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit%20Setup%202.2.0.exe');
+  assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit', '2.2.0', 'EasyGit-2.2.0-portable.exe'),
+    'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit-2.2.0-portable.exe');
+  assert.equal(config.releaseAssetUrl('file:///C:/tmp/repo', '2.2.0', 'x.exe'), null);
+  assert.equal(config.releaseAssetUrl('https://git.example.com/scm/team/easygit.git', '2.2.0', 'x.exe'), null);
+  assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit.git', '../2.2.0', 'x.exe'), null);
+});
+
+test('tag without executables: the exe comes from the GitHub Release and is verified', async (t) => {
+  const src = makeSource(t, { withExecutables: false });
+  const asked = [];
+  const fetchAsset = async ({ url, dest, onBytes }) => {
+    asked.push(url);
+    fs.writeFileSync(dest, src.installer);
+    onBytes(src.installer.length);
+  };
+  const { u, launched } = updaterFor(t, src, { fetchAsset, assetUrl: (v, f) => `https://github.com/owner/easygit/releases/download/v${v}/${encodeURIComponent(f)}` });
+  assert.equal((await u.check()).status, 'available');
+  assert.equal((await u.download()).status, 'ready');
+  assert.deepEqual(asked, ['https://github.com/owner/easygit/releases/download/v1.4.0/EasyGit%20Setup%201.4.0.exe']);
+  await u.install();
+  assert.equal(sha(fs.readFileSync(launched[0].file)), sha(src.installer));
+
+  // A tampered asset fails the checksum and is deleted.
+  const bad = updaterFor(t, src, { fetchAsset: async ({ dest }) => fs.writeFileSync(dest, Buffer.alloc(src.installer.length)), assetUrl: () => 'https://github.com/o/r/releases/download/v1.4.0/x.exe' });
+  await bad.u.check();
+  const s = await bad.u.download();
+  assert.equal(s.status, 'error');
+  assert.equal(s.error.kind, 'checksum');
+  assert.deepEqual(fs.readdirSync(path.join(bad.workDir, 'download')), []);
+
+  // Not a GitHub source and no exe in the tag: reported, not installed.
+  const none = updaterFor(t, src);
+  await none.u.check();
+  assert.equal((await none.u.download()).error.kind, 'metadata');
 });
 
 test('a release without update.json is reported, not installed', async (t) => {

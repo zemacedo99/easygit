@@ -213,7 +213,7 @@ function transition(state, status, patch = {}) {
 
 const ERRORS = {
   offline: { title: 'Can’t reach the update server', detail: 'Check your internet or company network connection, then try again.' },
-  access: { title: 'No access to EasyGit updates', detail: 'Your computer could not sign in to the EasyGit update source. Make sure you can open the EasyGit project in Bitbucket, then try again.' },
+  access: { title: 'No access to EasyGit updates', detail: 'Your computer could not sign in to the EasyGit update source. Make sure you can open the EasyGit project on GitHub, then try again.' },
   unavailable: { title: 'Update server unavailable', detail: 'The EasyGit update source did not respond as expected. Try again later.' },
   metadata: { title: 'Update information is incomplete', detail: 'This version can’t be installed from inside EasyGit. Ask for the new version to be downloaded manually.' },
   download: { title: 'Download didn’t finish', detail: 'The update could not be downloaded completely. Nothing was installed. Try again.' },

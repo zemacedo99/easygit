@@ -5,14 +5,14 @@
  * ---------------
  * THE one place that says where EasyGit looks for updates.
  *
- * Updates come from the EasyGit Git repository itself: every release is an
- * annotated tag vX.Y.Z whose commit contains versions/vX.Y.Z/ with the
- * installer, the portable exe and update.json (size + SHA-256 of both, plus the
- * release's "What's new"). See docs/RELEASE_PROCESS.md.
+ * Updates come from the public EasyGit repository on GitHub: every release is
+ * an annotated tag vX.Y.Z whose commit contains versions/vX.Y.Z/update.json
+ * (size + SHA-256 of the installer and the portable exe, plus the release's
+ * "What's new"). The executables themselves are attached to the matching
+ * GitHub Release (they are never committed). See docs/RELEASE_PROCESS.md.
  *
- * The repository is private, so it is read with Git using the sign-in Windows
- * already has for it (Git Credential Manager). EasyGit never asks for, stores or
- * logs credentials; Git prompts are disabled so nothing ever pops up.
+ * The repository is read with Git with prompts disabled; EasyGit never asks
+ * for, stores or logs credentials.
  *
  * EASYGIT_UPDATE_SOURCE overrides the repository for testing (e.g. a local
  * file:// repository). It is read only here, in the main process.
@@ -25,8 +25,20 @@ function updateSource(env = process.env) {
   return override && /^(https:\/\/|file:\/\/)/.test(override) ? override : DEFAULT_REPOSITORY;
 }
 
+/**
+ * Download URL of a release file attached to a GitHub Release, or null when the
+ * update source is not a github.com repository. Used when a release tag does not
+ * contain the executable itself.
+ */
+function releaseAssetUrl(source, version, file) {
+  const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(String(source || ''));
+  if (!m || !/^\d+\.\d+\.\d+$/.test(version)) return null;
+  return `https://github.com/${m[1]}/${m[2]}/releases/download/v${version}/${encodeURIComponent(file)}`;
+}
+
 module.exports = {
   updateSource,
+  releaseAssetUrl,
   /** Folder (inside the tag) holding a release's files. */
   releaseFolder: (version) => `versions/v${version}`,
   /** Automatic check after startup: delay, so the window is never slowed down. */

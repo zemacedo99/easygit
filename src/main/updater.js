@@ -10,7 +10,9 @@
  *              newer, a metadata-only clone of that tag (no file contents)
  *              reads versions/vX.Y.Z/update.json and validates it.
  *  - download: fetches ONLY the installer (or portable exe) object from that tag,
- *              with progress, into a private staging folder.
+ *              with progress, into a private staging folder. When the tag does
+ *              not contain the exe (releases published on GitHub), it is
+ *              downloaded over HTTPS from the matching GitHub Release instead.
  *  - verify:   size + SHA-256 must match update.json, or the file is deleted.
  *  - install:  re-verifies, then hands the file to `launch` (main.js), which
  *              runs the installer / portable helper and quits.
@@ -74,6 +76,48 @@ function rmrf(p) {
 }
 
 /**
+ * Download a GitHub Release asset over HTTPS into `dest`, following GitHub's
+ * redirects (HTTPS only), never writing more than `maxBytes`.
+ */
+function httpsDownload({ url, dest, maxBytes, onBytes = () => {}, timeoutMs = config.gitTimeoutMs, redirects = 5 }) {
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    if (!/^https:\/\//.test(url)) return reject(new UpdateError('download', 'only https downloads are allowed'));
+    const req = https.get(url, { headers: { 'User-Agent': 'EasyGit-updater', Accept: 'application/octet-stream' } }, (res) => {
+      const code = res.statusCode || 0;
+      if (code >= 300 && code < 400 && res.headers.location) {
+        res.resume();
+        if (redirects <= 0) return reject(new UpdateError('download', 'too many redirects'));
+        const next = new URL(res.headers.location, url).href;
+        return resolve(httpsDownload({ url: next, dest, maxBytes, onBytes, timeoutMs, redirects: redirects - 1 }));
+      }
+      if (code !== 200) {
+        res.resume();
+        return reject(new UpdateError(code === 404 ? 'metadata' : code === 401 || code === 403 ? 'access' : 'unavailable', `HTTP ${code}`));
+      }
+      const out = fs.createWriteStream(dest);
+      let got = 0;
+      res.on('data', (chunk) => {
+        got += chunk.length;
+        if (maxBytes && got > maxBytes) {
+          req.destroy();
+          out.destroy();
+          reject(new UpdateError('download', 'larger than expected'));
+          return;
+        }
+        onBytes(got);
+      });
+      res.on('error', () => reject(new UpdateError('download')));
+      out.on('error', () => reject(new UpdateError('disk')));
+      out.on('finish', () => resolve());
+      res.pipe(out);
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
+    req.on('error', (e) => reject(e instanceof UpdateError ? e : new UpdateError('offline', String(e && e.message))));
+  });
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.currentVersion
  * @param {'installed'|'portable'|'development'|'unsupported'} opts.buildKind
@@ -82,8 +126,10 @@ function rmrf(p) {
  * @param {(action: {kind: string, file: string}) => Promise<void>|void} [opts.launch]
  * @param {() => string} [opts.source]   update repository (from updateConfig)
  * @param {typeof runGit} [opts.git]
+ * @param {typeof httpsDownload} [opts.fetchAsset]  GitHub Release asset download
+ * @param {(version: string, file: string) => string|null} [opts.assetUrl]
  */
-function createUpdater({ currentVersion, buildKind, workDir, onState = () => {}, launch = () => {}, source = () => config.updateSource(), git = runGit, lastCheckedAt = null }) {
+function createUpdater({ currentVersion, buildKind, workDir, onState = () => {}, launch = () => {}, source = () => config.updateSource(), git = runGit, fetchAsset = httpsDownload, assetUrl = (version, file) => config.releaseAssetUrl(source(), version, file), lastCheckedAt = null }) {
   let state = { status: 'idle', currentVersion, buildKind, lastCheckedAt };
   let repoDir = null; // metadata-only clone of the latest release tag
   let busy = false;
@@ -154,6 +200,19 @@ function createUpdater({ currentVersion, buildKind, workDir, onState = () => {},
     return valid.metadata;
   }
 
+  /** Size + SHA-256 must match update.json; then the file is staged as ready. */
+  async function verifyAndStage(partial, finalFile, artifact) {
+    state = { ...state, progress: 100 };
+    set('verifying');
+    const verdict = await core.verifyFile(partial, artifact);
+    if (!verdict.ok) {
+      rmrf(partial);
+      throw new UpdateError(verdict.reason === 'checksum' ? 'checksum' : 'download');
+    }
+    fs.renameSync(partial, finalFile);
+    return set('ready', { file: finalFile }) && publicState();
+  }
+
   /** Download + verify the artifact for this build kind. */
   async function download() {
     if (busy || !(state.status === 'available' || (state.status === 'error' && state.latest && state.latest.installer))) return publicState();
@@ -177,7 +236,27 @@ function createUpdater({ currentVersion, buildKind, workDir, onState = () => {},
       const treePath = `${config.releaseFolder(meta.version)}/${artifact.file}`;
       const ls = await gitOrThrow(['ls-tree', 'HEAD', '--', treePath], { cwd: repoDir });
       const m = /^\d+ blob ([0-9a-f]{40,64})\t/.exec(ls.stdout);
-      if (!m) throw new UpdateError('metadata', 'artifact not in the release');
+      if (!m) {
+        // The tag carries only update.json: the executable is attached to the
+        // GitHub Release instead. The same size + SHA-256 checks apply below.
+        const url = assetUrl(meta.version, artifact.file);
+        if (!url) throw new UpdateError('metadata', 'artifact not in the release');
+        let lastAssetPct = 0;
+        await fetchAsset({
+          url,
+          dest: partial,
+          maxBytes: artifact.size,
+          onBytes: (got) => {
+            const pct = Math.min(99, Math.floor((got / artifact.size) * 100));
+            if (pct > lastAssetPct) {
+              lastAssetPct = pct;
+              state = { ...state, progress: pct, phase: 'downloading' };
+              onState(publicState());
+            }
+          },
+        });
+        return await verifyAndStage(partial, finalFile, artifact);
+      }
       const oid = m[1];
       // Fetch just this one object (what Git does internally for a partial clone),
       // reading progress from Git's "Receiving objects: …, 12.3 MiB" lines.
@@ -200,15 +279,7 @@ function createUpdater({ currentVersion, buildKind, workDir, onState = () => {},
       });
       const written = await git(['cat-file', 'blob', oid], { cwd: repoDir, stdoutFile: partial });
       if (written.code !== 0) throw new UpdateError('download', written.stderr);
-      state = { ...state, progress: 100 };
-      set('verifying');
-      const verdict = await core.verifyFile(partial, artifact);
-      if (!verdict.ok) {
-        rmrf(partial);
-        throw new UpdateError(verdict.reason === 'checksum' ? 'checksum' : 'download');
-      }
-      fs.renameSync(partial, finalFile);
-      return set('ready', { file: finalFile }) && publicState();
+      return await verifyAndStage(partial, finalFile, artifact);
     } catch (err) {
       rmrf(partial);
       if (err instanceof UpdateError) return fail(err);
@@ -247,4 +318,4 @@ function createUpdater({ currentVersion, buildKind, workDir, onState = () => {},
   return { check, download, install, cleanup, getState: publicState };
 }
 
-module.exports = { createUpdater, runGit, UpdateError };
+module.exports = { createUpdater, runGit, httpsDownload, UpdateError };
