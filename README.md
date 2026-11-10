@@ -92,22 +92,26 @@ the same way.
 [Installing EasyGit](#installing-easygit). Node.js is **not** required; **Git**
 must be installed.
 
-| Download | Best for | File |
+Downloads are published on the
+[GitHub Releases page](https://github.com/zemacedo99/easygit/releases):
+
+| Download | Best for | Release asset |
 | --- | --- | --- |
-| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | [`EasyGit Setup 2.1.0.exe`](versions/v2.1.0/EasyGit%20Setup%202.1.0.exe) |
-| **Portable** | Anyone who doesn't want to install — just double-click to run | [`EasyGit-2.1.0-portable.exe`](versions/v2.1.0/EasyGit-2.1.0-portable.exe) |
+| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | `EasyGit Setup X.Y.Z.exe` |
+| **Portable** | Anyone who doesn't want to install — just double-click to run | `EasyGit-X.Y.Z-portable.exe` |
 
 - The app is currently **unsigned**, so Windows SmartScreen may warn on first
   launch ("Windows protected your PC" → **More info** → **Run anyway**).
-- **Verify your download** against the checksums in
-  [`versions/v2.1.0/SHA256SUMS.txt`](versions/v2.1.0/SHA256SUMS.txt):
+- **Verify your download** against the SHA-256 checksums published with the
+  release:
   ```powershell
-  Get-FileHash ".\versions\v2.1.0\EasyGit Setup 2.1.0.exe" -Algorithm SHA256
+  Get-FileHash ".\EasyGit Setup X.Y.Z.exe" -Algorithm SHA256
   ```
-- Full notes: [`versions/v2.1.0/RELEASE_NOTES.md`](versions/v2.1.0/RELEASE_NOTES.md).
+- Release notes for every version are under [`versions/`](versions/) (for
+  example [`versions/v2.1.0/RELEASE_NOTES.md`](versions/v2.1.0/RELEASE_NOTES.md)).
 
-**Older releases** are kept under [`versions/`](versions/) (for example,
-`versions/v2.0.0/`, `versions/v1.3.0/`, `versions/v1.2.0/`, `versions/v1.1.0/` and `versions/v1.0.0/`).
+> Executables are never committed to this repository; they are attached to the
+> GitHub Release of each version tag.
 
 ---
 
@@ -230,24 +234,12 @@ The app icon is generated from the EasyGit logo at
    **`build/icon.ico`** (multi-size Windows icon). Both are committed to the repo.
 3. Rebuild with `npm run dist`.
 
-### Optional: brand logo
-
-EasyGit currently ships **without** a separate brand logo image, and
-the UI does not depend on one, so nothing breaks. When the official asset becomes
-available, add it at:
-
-```
-src/renderer/assets/brand-logo.png
-```
-
-and wire it into the header where appropriate. Do **not** commit an unofficial or
-placeholder version.
-
 ### Releasing a new version
 
-EasyGit releases are versioned with a Git tag (e.g. `v1.0.0`) and a committed
-`versions/vX.Y.Z/` folder containing the installer, portable `.exe`,
-`SHA256SUMS.txt`, and release notes. For the full step-by-step process, see
+EasyGit releases are versioned with a Git tag (e.g. `v2.2.0`), a committed
+`versions/vX.Y.Z/` folder with the release notes, `SHA256SUMS.txt` and the
+updater's `update.json`, and a **GitHub Release** for the tag with the installer
+and portable `.exe` attached. For the full step-by-step process, see
 [Release Process](docs/RELEASE_PROCESS.md).
 
 ---
@@ -383,10 +375,12 @@ next to the version in the header. Nothing is installed until you choose to:
    your projects and settings are kept. The installed app upgrades in place (no
    uninstall); the portable app replaces its own file.
 
-Updates come from the EasyGit repository on Bitbucket, using the sign-in your
-computer already has for it — EasyGit never asks for or stores passwords. If you
-can't open the EasyGit project in Bitbucket, the check shows a friendly "No
-access" message and you can keep updating manually from the download links.
+Updates come from the public EasyGit repository on GitHub: the newest release
+tag says which version is current, and the installer or portable file is
+downloaded from that version's GitHub Release. EasyGit never asks for or stores
+passwords. If the check can't reach GitHub, it shows a friendly message and you
+can keep updating manually from the
+[Releases page](https://github.com/zemacedo99/easygit/releases).
 A download that doesn't match the official checksum is deleted and never run.
 
 ---
@@ -510,9 +504,7 @@ Project vision: Inês Caetano
 Developed by: José Dantas Macedo, with Claude
 
 The EasyGit logo (shown in the app header) lives at
-`src/renderer/assets/logo.svg`. It merges the brand mark (red square
-with the top-right sail cut), the mascot mark (the two nodes as eyes), and
-the Git branch/merge graph.
+`src/renderer/assets/logo.svg`: a Git branch glyph on a rounded square.
 
 ---
 

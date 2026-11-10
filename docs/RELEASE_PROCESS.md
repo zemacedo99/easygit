@@ -9,29 +9,33 @@ The current latest release is **`v1.3.0`**.
 
 ## Release model
 
-Every EasyGit release has **two** things that travel together:
+Releases are published as **GitHub Releases** of
+[`zemacedo99/easygit`](https://github.com/zemacedo99/easygit/releases). Every
+release has **three** things that travel together:
 
-1. **An annotated Git tag** — e.g. `v1.0.0`.
-2. **A versioned folder committed in the repo** — e.g. `versions/v1.0.0/`.
+1. **An annotated Git tag** — e.g. `v2.2.0`.
+2. **A versioned folder committed in the repo** — e.g. `versions/v2.2.0/` — with
+   the release notes, the checksums and the in-app updater metadata (text only).
+3. **A GitHub Release for that tag** with the installer and the portable `.exe`
+   attached as release assets.
 
 A Git tag points to a **commit**, not to a folder. So the tag for a release must
 point to the commit that *contains* that release's `versions/vX.Y.Z/` folder.
 
-Each version folder contains:
-
 ```text
-versions/vX.Y.Z/
+versions/vX.Y.Z/                 # committed
+  RELEASE_NOTES.md               # human-readable notes for this version
+  SHA256SUMS.txt                 # checksums for the two .exe files
+  update.json                    # in-app updater metadata (from v2.0.0 on)
+
+GitHub Release vX.Y.Z            # attached assets (never committed)
   EasyGit Setup X.Y.Z.exe        # installer (recommended for users)
   EasyGit-X.Y.Z-portable.exe     # portable executable
-  SHA256SUMS.txt                 # checksums for the two .exe files
-  RELEASE_NOTES.md               # human-readable notes for this version
-  update.json                    # in-app updater metadata (from v2.0.0 on)
 ```
 
-> The generated `dist/` folder is **always ignored** and is **never** committed.
-> Only the *copied* artifacts inside `versions/vX.Y.Z/` are tracked in Git. This is
-> enabled by a scoped exception in [`.gitignore`](../.gitignore)
-> (`!versions/**/*.exe`) — `dist/` and `*.exe` everywhere else stay ignored.
+> Executables are **never** committed: `dist/` and `*.exe` are ignored everywhere
+> by [`.gitignore`](../.gitignore), including under `versions/`. Releases up to
+> v2.1.0 keep only their release notes in this repository.
 
 ---
 
@@ -49,7 +53,7 @@ Rules:
 
 - **`v1.0.0` must never be modified.** It is a fixed historical release.
 - The same applies to **every** released version — once `versions/vX.Y.Z/` is
-  pushed and tagged, treat it as immutable.
+  pushed and tagged and its GitHub Release is published, treat it as immutable.
 - If you find a mistake after a release, **do not** edit the old release. Ship a
   new patch version instead (e.g. `v1.0.0` mistake → release `v1.0.1`, or
   `v1.0.1` → `v1.0.2`).
@@ -114,8 +118,7 @@ version history**). That list is bundled with the app, so it must be updated
    `sections` of short, plain-language bullets. Keep it grounded in the release
    notes you write in step 12 — never invent features.
 2. Update the README **Download the latest version** section to the new version
-   (installer, portable, `SHA256SUMS.txt`, `RELEASE_NOTES.md` links), keeping the
-   older releases listed.
+   number (the downloads themselves are on the GitHub Releases page).
 3. Run `npm test`. `test/changelog.test.mjs` **fails** if the `package.json`
    version is not the newest changelog entry, if entries are out of order, or if
    a released `versions/` folder is missing from the changelog — so a forgotten
@@ -161,9 +164,11 @@ the main flow works. Confirm the header shows the **new version** and that
 versions/v1.0.1/
 ```
 
-### 10. Copy the artifacts from `dist/` into the version folder
+### 10. Copy the artifacts from `dist/` into the version folder (local only)
 
-Copy (do **not** move) the two executables:
+Copy (do **not** move) the two executables. Git ignores them; they are copied
+here only so the checksums and `update.json` can be generated from the real
+files, and they are uploaded to the GitHub Release in step 15a:
 
 ```text
 versions/v1.0.1/EasyGit Setup 1.0.1.exe
@@ -195,8 +200,9 @@ Then re-verify the copies match the originals from `dist/` before committing.
 
 ### 11a. Generate the in-app update metadata (required from v2.0.0)
 
-EasyGit updates itself from this repository (see [In-app updates](#in-app-updates)).
-It needs `versions/vX.Y.Z/update.json`, generated from the real files:
+EasyGit updates itself from this repository and its GitHub Releases (see
+[In-app updates](#in-app-updates)). It needs `versions/vX.Y.Z/update.json`,
+generated from the real files:
 
 ```bash
 node scripts/make-update-metadata.mjs 1.0.1
@@ -206,9 +212,9 @@ The script hashes both executables, checks them against `SHA256SUMS.txt`, copies
 this version's "What's new" from `src/renderer/changelog.mjs`, validates the
 result exactly as EasyGit will, and writes `update.json`. It **refuses** versions
 older than v2.0.0 and versions that are already tagged, so released folders are
-never touched. Then run `npm test`: `test/updateMetadata.test.mjs` **fails** if
-any release folder from v2.0.0 onward has no `update.json`, or if it doesn't match
-the files or the changelog — so a release without updater metadata cannot pass.
+never touched. Then run `npm test`: while the executables are in the folder,
+`test/updateMetadata.test.mjs` **fails** if a release folder from v2.0.0 onward
+has no `update.json`, or if it doesn't match the files or the changelog.
 
 ### 12. Create the release notes
 
@@ -222,11 +228,13 @@ and describe what changed in this version. Keep the **Requirements** reminders:
 
 ### 13. Commit the release artifacts
 
-Stage the version folder plus the version bump (adjust to what actually changed):
+Stage the version folder (only its text files are tracked; the `.exe` files stay
+ignored) plus the version bump (adjust to what actually changed):
 
 ```bash
 git add versions/v1.0.1 package.json package-lock.json src/renderer/changelog.mjs README.md
-git commit -m "Add v1.0.1 release artifacts"
+git status --short   # must NOT list any .exe
+git commit -m "Add v1.0.1 release metadata"
 ```
 
 ### 14. Create an annotated tag on this commit
@@ -246,6 +254,20 @@ git push origin master
 git push origin v1.0.1
 ```
 
+### 15a. Publish the GitHub Release
+
+Create a GitHub Release for tag `v1.0.1` (title `EasyGit v1.0.1`, body = the
+release notes) and attach **exactly** the two files named in `update.json`:
+
+```bash
+gh release create v1.0.1 --title "EasyGit v1.0.1" --notes-file versions/v1.0.1/RELEASE_NOTES.md \
+  "versions/v1.0.1/EasyGit Setup 1.0.1.exe" "versions/v1.0.1/EasyGit-1.0.1-portable.exe"
+```
+
+Do not rename the assets: the in-app updater downloads
+`https://github.com/zemacedo99/easygit/releases/download/vX.Y.Z/<file name>` and
+rejects anything whose size or SHA-256 differs from `update.json`.
+
 ### 16. Verify
 
 ```bash
@@ -256,8 +278,10 @@ git ls-tree -r v1.0.1 -- versions/v1.0.1
 git ls-remote --tags origin v1.0.1
 ```
 
-Confirm: working tree clean; the tag lists for `v1.0.1`; the four files appear
-under `versions/v1.0.1/`; `dist/` is still ignored; and the remote tag matches.
+Confirm: working tree clean; the tag lists for `v1.0.1`; `RELEASE_NOTES.md`,
+`SHA256SUMS.txt` and `update.json` appear under `versions/v1.0.1/` (no `.exe`);
+`dist/` is still ignored; the remote tag matches; and the GitHub Release lists
+both executables.
 
 ---
 
@@ -270,8 +294,8 @@ under `versions/v1.0.1/`; `dist/` is still ignored; and the remote tag matches.
 - ❌ **Do not** move or recreate old tags — unless you are *intentionally* fixing
   a release mistake and have decided to do so deliberately.
 - ❌ **Do not** commit the `dist/` folder.
-- ❌ **Do not** commit generated `.exe` files from anywhere **except**
-  `versions/vX.Y.Z/`.
+- ❌ **Do not** commit generated `.exe` files anywhere — they belong on the
+  GitHub Release.
 - ❌ **Do not** change the updater itself as part of a normal release; a release
   only adds `versions/vX.Y.Z/update.json` (step 11a).
 - 🔁 If a mistake is found **after** a release, ship a new patch version (e.g.
@@ -284,17 +308,17 @@ under `versions/v1.0.1/`; `dist/` is still ignored; and the remote tag matches.
 From **v2.0.0**, EasyGit can update itself (Settings → *About EasyGit* →
 **Check for updates**; it also checks quietly once after starting).
 
-- **Source:** this Git repository, configured in one place:
+- **Source:** the public GitHub repository
+  `https://github.com/zemacedo99/easygit.git`, configured in one place:
   [`src/main/updateConfig.js`](../src/main/updateConfig.js). The newest `vX.Y.Z`
   tag is the latest release; its `versions/vX.Y.Z/update.json` lists the files,
   sizes and SHA-256 checksums.
-- **Access:** the repository is private, so EasyGit reads it with **Git**, using
-  the sign-in Windows already has for Bitbucket (Git Credential Manager). EasyGit
-  never asks for, stores or logs credentials, and Git prompts are disabled. People
-  who cannot open the repository in Bitbucket get a friendly "No access to
-  EasyGit updates" message and must update manually (below).
+- **Access:** EasyGit reads the tags and `update.json` with **Git** (prompts
+  disabled); a public repository needs no sign-in. EasyGit never asks for,
+  stores or logs credentials.
 - **Download:** only the one file needed (installer or portable exe) is fetched
-  from the release tag — not the whole repository history.
+  over HTTPS from the GitHub Release assets of that tag. (If a tag contains the
+  exe itself, as in a local test repository, it is fetched from the tag.)
 - **Verification:** the file's size and SHA-256 must match `update.json`, or it is
   deleted and nothing runs. It is checked again right before installing.
 - **Installed (NSIS):** EasyGit runs the new installer silently
@@ -307,7 +331,8 @@ From **v2.0.0**, EasyGit can update itself (Settings → *About EasyGit* →
   exe to close, swaps itself into the same file name (rolling back on any error)
   and restarts it.
 - **Testing:** set `EASYGIT_UPDATE_SOURCE=file:///C:/path/to/test-repo` to point a
-  build at a local test repository instead of Bitbucket.
+  build at a local test repository instead of GitHub (for a `file://` source the
+  executables must be inside the tag's `versions/vX.Y.Z/` folder).
 - **First self-updating release:** users on v1.3.0 or older don't have the
   updater, so they install v2.0.0 once manually; after that, updates are in-app.
 
@@ -348,7 +373,7 @@ saved repository list. (On Windows this lives under
 
 ## "When I am ready for a new release"
 
-When José says something like:
+When the maintainer says something like:
 
 ```text
 I am ready for a new EasyGit release
@@ -362,16 +387,17 @@ Claude should:
 3. **Update the in-app changelog** (`src/renderer/changelog.mjs`) and the README
    download links **before building**, and make sure `npm test` passes.
 4. **Build the app** with `npm run dist:win`.
-5. **Create the new `versions/vX.Y.Z/` folder** and copy in the installer,
-   portable, `SHA256SUMS.txt`, and `RELEASE_NOTES.md`, then generate
-   `update.json` with `node scripts/make-update-metadata.mjs X.Y.Z` and run
-   `npm test` again.
-6. **Commit the release artifacts** with `Add vX.Y.Z release artifacts` (plus the
-   version bump, the changelog and the README update).
+5. **Create the new `versions/vX.Y.Z/` folder**, copy in the installer and
+   portable (ignored by Git), write `SHA256SUMS.txt` and `RELEASE_NOTES.md`, then
+   generate `update.json` with `node scripts/make-update-metadata.mjs X.Y.Z` and
+   run `npm test` again.
+6. **Commit the release metadata** with `Add vX.Y.Z release metadata` (plus the
+   version bump, the changelog and the README update) — no `.exe` files.
 7. **Create and push the new annotated tag** `vX.Y.Z`, pointing at that commit,
    and push `master`.
-8. **Report** the tagged commit, the executable paths under `versions/vX.Y.Z/`,
-   and the SHA-256 checksums.
+8. **Publish the GitHub Release** for the tag with both executables attached.
+9. **Report** the tagged commit, the GitHub Release URL and the SHA-256
+   checksums.
 
 Claude should **not** modify previous releases, move old tags, commit `dist/`, or
 change the updater as part of this flow.

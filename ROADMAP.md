@@ -102,18 +102,15 @@ before being added:
 - [x] **In-app updates** (from v2.0.0): Settings → *Check for updates* plus one
       quiet check after start; download with progress, SHA-256 verification,
       then a silent in-place NSIS upgrade or a portable self-replace, and restart.
-      Source: the release tags of this Bitbucket repository, read with Git and the
-      user's existing sign-in (no stored credentials). See
+      Source: the release tags of the public GitHub repository (read with Git, no
+      stored credentials) and the executables attached to its GitHub Releases. See
       [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md#in-app-updates).
 - [x] Optional **online repository status** on each project (configured remote
       vs. only on this computer), read locally from Git; never changes remotes.
 - [ ] **Code-sign** the installer/portable (a signed publisher would add a second
       integrity check and stop SmartScreen warnings).
-- [ ] An update source that doesn't require Bitbucket access (e.g. an internal
-      HTTPS file server), for users outside the repository.
-- [ ] Optional **brand logo** integration once the official asset file
-      is available (documented placeholder path:
-      `src/renderer/assets/brand-logo.png`).
+- [x] Publish releases on **GitHub Releases** (executables as release assets,
+      not committed) and point the in-app updater at them.
 
 ---
 
