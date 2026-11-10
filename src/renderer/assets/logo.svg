@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="EasyGit">
+  <title>EasyGit</title>
+  <!-- EasyGit logo: a Git branch glyph on a rounded square. Original artwork. -->
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="#2f6f8f"/>
+  <g fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round">
+    <line x1="176" y1="128" x2="176" y2="384"/>
+    <path d="M336 176 C336 280 176 250 176 336"/>
+  </g>
+  <g fill="#ffffff">
+    <circle cx="176" cy="128" r="48"/>
+    <circle cx="176" cy="384" r="48"/>
+    <circle cx="336" cy="176" r="48"/>
+  </g>
+  <g fill="#2f6f8f">
+    <circle cx="176" cy="128" r="22"/>
+    <circle cx="176" cy="384" r="22"/>
+    <circle cx="336" cy="176" r="22"/>
+  </g>
+</svg>
