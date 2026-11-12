@@ -6,9 +6,13 @@
   "private": true,
   "main": "src/main/main.js",
   "scripts": {
+    "postinstall": "node scripts/ensure-electron.js",
+    "prestart": "node scripts/ensure-electron.js",
     "start": "electron .",
+    "predev": "node scripts/ensure-electron.js",
     "dev": "electron . --dev",
     "test": "node --test",
+    "premake-icons": "node scripts/ensure-electron.js",
     "make-icons": "electron scripts/make-icons.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder",
@@ -89,5 +93,8 @@
       "icon": "build/icon.png",
       "category": "Development"
     }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
   }
 }
