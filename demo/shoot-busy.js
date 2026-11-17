@@ -48,7 +48,9 @@ app.whenReady().then(async () => {
   await shot('25-busy-checking.png');
   await wait(900);
 
-  // Capture the inline "Downloading…" indicator (mock download takes ~1100ms).
+  // Capture the inline "Downloading…" indicator. The mock download resolves at
+  // once, so slow it to ~1100ms here to keep the indicator on screen.
+  await run("(() => { const d = window.easygit.download; window.easygit.download = (...a) => new Promise((r) => setTimeout(() => r(d(...a)), 1100)); })()");
   await run("window.__demo.clickByText('Download latest version')");
   await wait(500);
   await shot('26-busy-download.png');
