@@ -38,6 +38,3 @@ src/renderer/assets/_icon_tmp.html
 repositories.json
 *.tmp
 
-# Demo captures (demo/shoot*.js) are generated locally, not committed
-screenshots/
-*.mp4
