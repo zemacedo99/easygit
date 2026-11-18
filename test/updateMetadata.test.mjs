@@ -21,10 +21,10 @@ function fakeRelease(t, version, { badSums = false } = {}) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const inst = crypto.randomBytes(1000);
   const port = crypto.randomBytes(800);
-  fs.writeFileSync(path.join(dir, `EasyGit Setup ${version}.exe`), inst);
+  fs.writeFileSync(path.join(dir, `EasyGit-Setup-${version}.exe`), inst);
   fs.writeFileSync(path.join(dir, `EasyGit-${version}-portable.exe`), port);
   fs.writeFileSync(path.join(dir, 'SHA256SUMS.txt'),
-    `${badSums ? 'F'.repeat(64) : sha(inst).toUpperCase()}  EasyGit Setup ${version}.exe\r\n${sha(port).toUpperCase()}  EasyGit-${version}-portable.exe\r\n`);
+    `${badSums ? 'F'.repeat(64) : sha(inst).toUpperCase()}  EasyGit-Setup-${version}.exe\r\n${sha(port).toUpperCase()}  EasyGit-${version}-portable.exe\r\n`);
   return { dir, inst, port };
 }
 

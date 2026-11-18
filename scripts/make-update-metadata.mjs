@@ -28,7 +28,7 @@ const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file
  * @returns {object} the metadata
  */
 export function buildMetadata({ dir, version, changelog }) {
-  const files = { installer: `EasyGit Setup ${version}.exe`, portable: `EasyGit-${version}-portable.exe` };
+  const files = { installer: `EasyGit-Setup-${version}.exe`, portable: `EasyGit-${version}-portable.exe` };
   const sumsFile = path.join(dir, 'SHA256SUMS.txt');
   if (!fs.existsSync(sumsFile)) throw new Error(`Missing ${sumsFile}`);
   const sums = new Map(

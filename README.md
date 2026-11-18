@@ -97,7 +97,7 @@ Downloads are published on the
 
 | Download | Best for | Release asset |
 | --- | --- | --- |
-| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | `EasyGit Setup X.Y.Z.exe` |
+| **Installer** *(recommended)* | Most users — installs EasyGit and adds Start-menu / desktop shortcuts | `EasyGit-Setup-X.Y.Z.exe` |
 | **Portable** | Anyone who doesn't want to install — just double-click to run | `EasyGit-X.Y.Z-portable.exe` |
 
 - The app is currently **unsigned**, so Windows SmartScreen may warn on first
@@ -105,7 +105,7 @@ Downloads are published on the
 - **Verify your download** against the SHA-256 checksums published with the
   release:
   ```powershell
-  Get-FileHash ".\EasyGit Setup X.Y.Z.exe" -Algorithm SHA256
+  Get-FileHash ".\EasyGit-Setup-X.Y.Z.exe" -Algorithm SHA256
   ```
 - Release notes for every version are under [`versions/`](versions/) (for
   example [`versions/v2.1.1/RELEASE_NOTES.md`](versions/v2.1.1/RELEASE_NOTES.md)).
@@ -125,7 +125,7 @@ desktop app:
 1. Get the EasyGit installer or portable app from your team's shared location (or
    build it yourself — see **Building EasyGit** below).
 2. **Windows:**
-   - *Installer* — `EasyGit Setup <version>.exe`: double-click it, choose where to
+   - *Installer* — `EasyGit-Setup-<version>.exe`: double-click it, choose where to
      install, and EasyGit is added to your Start menu (and, if you want, the
      desktop).
    - *Portable* — `EasyGit-<version>-portable.exe`: just double-click to run; no
@@ -195,7 +195,7 @@ On Windows, `npm run dist` produces:
 
 | File in `dist/` | What it is |
 | --- | --- |
-| `EasyGit Setup <version>.exe` | NSIS installer (lets the user pick the install folder, adds Start-menu/desktop shortcuts) |
+| `EasyGit-Setup-<version>.exe` | NSIS installer (lets the user pick the install folder, adds Start-menu/desktop shortcuts) |
 | `EasyGit-<version>-portable.exe` | Portable single-file app (run without installing) |
 | `win-unpacked/EasyGit.exe` | The unpacked app (also produced on its own by `npm run package`) |
 

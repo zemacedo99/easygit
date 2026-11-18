@@ -29,9 +29,14 @@ versions/vX.Y.Z/                 # committed
   update.json                    # in-app updater metadata (from v2.0.0 on)
 
 GitHub Release vX.Y.Z            # attached assets (never committed)
-  EasyGit Setup X.Y.Z.exe        # installer (recommended for users)
+  EasyGit-Setup-X.Y.Z.exe        # installer (recommended for users)
   EasyGit-X.Y.Z-portable.exe     # portable executable
 ```
+
+> Release file names must not contain spaces: GitHub turns each space into a dot
+> when a file is uploaded, and the in-app updater downloads the file by the name in
+> `update.json`. From v2.1.2 the installer is `EasyGit-Setup-X.Y.Z.exe`. The v2.1.1
+> installer is on GitHub as `EasyGit.Setup.2.1.1.exe`.
 
 > Executables are **never** committed: `dist/` and `*.exe` are ignored everywhere
 > by [`.gitignore`](../.gitignore), including under `versions/`. Releases up to
@@ -147,7 +152,7 @@ npm run dist:win
 ### 7. Confirm the generated files exist in `dist/`
 
 ```text
-dist/EasyGit Setup 1.0.1.exe
+dist/EasyGit-Setup-1.0.1.exe
 dist/EasyGit-1.0.1-portable.exe
 ```
 
@@ -171,7 +176,7 @@ here only so the checksums and `update.json` can be generated from the real
 files, and they are uploaded to the GitHub Release in step 15a:
 
 ```text
-versions/v1.0.1/EasyGit Setup 1.0.1.exe
+versions/v1.0.1/EasyGit-Setup-1.0.1.exe
 versions/v1.0.1/EasyGit-1.0.1-portable.exe
 ```
 
@@ -179,7 +184,7 @@ PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path versions\v1.0.1 | Out-Null
-Copy-Item "dist\EasyGit Setup 1.0.1.exe"    versions\v1.0.1 -Force
+Copy-Item "dist\EasyGit-Setup-1.0.1.exe"    versions\v1.0.1 -Force
 Copy-Item "dist\EasyGit-1.0.1-portable.exe" versions\v1.0.1 -Force
 ```
 
@@ -261,7 +266,7 @@ release notes) and attach **exactly** the two files named in `update.json`:
 
 ```bash
 gh release create v1.0.1 --title "EasyGit v1.0.1" --notes-file versions/v1.0.1/RELEASE_NOTES.md \
-  "versions/v1.0.1/EasyGit Setup 1.0.1.exe" "versions/v1.0.1/EasyGit-1.0.1-portable.exe"
+  "versions/v1.0.1/EasyGit-Setup-1.0.1.exe" "versions/v1.0.1/EasyGit-1.0.1-portable.exe"
 ```
 
 Do not rename the assets: the in-app updater downloads
@@ -347,7 +352,7 @@ Users who installed EasyGit with the installer should download and run the new
 installer:
 
 ```text
-EasyGit Setup 1.0.1.exe
+EasyGit-Setup-1.0.1.exe
 ```
 
 It installs **over** the previous version (same app, upgraded in place).

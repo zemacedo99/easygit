@@ -74,7 +74,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "EasyGit",
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "artifactName": "EasyGit-Setup-${version}.${ext}"
     },
     "portable": {
       "artifactName": "EasyGit-${version}-portable.${ext}"

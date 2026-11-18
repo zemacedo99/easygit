@@ -33,7 +33,11 @@ function updateSource(env = process.env) {
 function releaseAssetUrl(source, version, file) {
   const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(String(source || ''));
   if (!m || !/^\d+\.\d+\.\d+$/.test(version)) return null;
-  return `https://github.com/${m[1]}/${m[2]}/releases/download/v${version}/${encodeURIComponent(file)}`;
+  // GitHub stores an uploaded file name with spaces turned into dots
+  // ("EasyGit Setup 2.1.1.exe" -> "EasyGit.Setup.2.1.1.exe"). Releases from
+  // v2.1.2 on use names without spaces, so this only matters for older ones.
+  const assetName = String(file).replace(/ /g, '.');
+  return `https://github.com/${m[1]}/${m[2]}/releases/download/v${version}/${encodeURIComponent(assetName)}`;
 }
 
 module.exports = {

@@ -262,7 +262,9 @@ test('a staged file tampered with before install is refused', async (t) => {
 
 test('GitHub Release assets: download URL is built only for github.com sources', () => {
   assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit.git', '2.2.0', 'EasyGit Setup 2.2.0.exe'),
-    'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit%20Setup%202.2.0.exe');
+    'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit.Setup.2.2.0.exe');
+  assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit.git', '2.2.0', 'EasyGit-Setup-2.2.0.exe'),
+    'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit-Setup-2.2.0.exe');
   assert.equal(config.releaseAssetUrl('https://github.com/owner/easygit', '2.2.0', 'EasyGit-2.2.0-portable.exe'),
     'https://github.com/owner/easygit/releases/download/v2.2.0/EasyGit-2.2.0-portable.exe');
   assert.equal(config.releaseAssetUrl('file:///C:/tmp/repo', '2.2.0', 'x.exe'), null);
