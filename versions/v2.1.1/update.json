@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "version": "2.1.1",
+  "date": "2026-11-18",
+  "installer": {
+    "file": "EasyGit Setup 2.1.1.exe",
+    "size": 81758706,
+    "sha256": "96c670ce803a253d49c989ef56829d3a38deb93aeca1e0a284e803504f380e3e"
+  },
+  "portable": {
+    "file": "EasyGit-2.1.1-portable.exe",
+    "size": 81547804,
+    "sha256": "6a567547d1fa9e7e1ef6f75eae97ece54cdd9a5865f4f5a124c9f24f9879eb48"
+  },
+  "changelog": {
+    "version": "2.1.1",
+    "date": "2026-11-18",
+    "summary": "A new EasyGit logo, and updates now come from the public EasyGit page on GitHub.",
+    "sections": [
+      {
+        "heading": "Changes",
+        "items": [
+          "New EasyGit logo and app icon",
+          "Check for updates now looks on the public EasyGit page on GitHub, so updates work for everyone"
+        ]
+      }
+    ]
+  }
+}

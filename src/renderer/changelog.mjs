@@ -19,6 +19,20 @@
  */
 export const CHANGELOG = [
   {
+    version: '2.1.1',
+    date: '2026-11-18',
+    summary: 'A new EasyGit logo, and updates now come from the public EasyGit page on GitHub.',
+    sections: [
+      {
+        heading: 'Changes',
+        items: [
+          'New EasyGit logo and app icon',
+          'Check for updates now looks on the public EasyGit page on GitHub, so updates work for everyone',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.1.0',
     date: '2026-11-03',
     summary: 'See which projects are connected online, and Auto-find now finds projects inside other projects.',

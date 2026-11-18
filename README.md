@@ -88,7 +88,7 @@ the same way.
 
 ## Download the latest version
 
-**Latest release: v2.1.0.** Pick a download below, then follow
+**Latest release: v2.1.1.** Pick a download below, then follow
 [Installing EasyGit](#installing-easygit). Node.js is **not** required; **Git**
 must be installed.
 
@@ -108,7 +108,7 @@ Downloads are published on the
   Get-FileHash ".\EasyGit Setup X.Y.Z.exe" -Algorithm SHA256
   ```
 - Release notes for every version are under [`versions/`](versions/) (for
-  example [`versions/v2.1.0/RELEASE_NOTES.md`](versions/v2.1.0/RELEASE_NOTES.md)).
+  example [`versions/v2.1.1/RELEASE_NOTES.md`](versions/v2.1.1/RELEASE_NOTES.md)).
 
 > Executables are never committed to this repository; they are attached to the
 > GitHub Release of each version tag.

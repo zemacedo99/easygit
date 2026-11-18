@@ -3,7 +3,7 @@
 This document describes how EasyGit is released, so a new release can be produced
 consistently without re-explaining the steps each time.
 
-The current latest release is **`v1.3.0`**.
+The current latest release is **`v2.1.1`**.
 
 ---
 
